@@ -8,8 +8,7 @@
 #include <pthread.h>
 #include <errno.h>
 
-#include "list.h"
-#include "debug.h"
+#include "srtp_common.h"
 
 #define USAGE "USAGE: %s [-d] port\n"
 #define BAD_ARGS 1
@@ -19,10 +18,6 @@
 #define FILE_EXISTS 5
 #define CANNOT_CREATE 6
 #define BAD_SIZE 7
-
-#define PACKET_SIZE 512
-#define HEADER_SIZE 2
-#define PAYLOAD_SIZE PACKET_SIZE - HEADER_SIZE
 
 extern int debug, errno;
 
@@ -44,6 +39,7 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     d("Child process opening emphemeral port %d\n", 
             ntohs(((struct sockaddr_in *)&addr)->sin_port));
     long filesize = -1, read = 0;
+    print_packet((struct sockaddr_in *)&addr, &origin, buffer, RECV);
     /* read the request type */
     if (strncmp(buffer, "WRQ|", 4) != 0) {
         d("Request was not of valid format or "

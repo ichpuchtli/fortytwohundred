@@ -6,8 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-#include "list.h"
-#include "debug.h"
+#include "srtp_common.h"
 
 #define USAGE "USAGE: %s [-d] server port filename\n"
 #define BAD_ARGS 1
@@ -15,7 +14,7 @@
 #define BAD_FILE 3
 #define RUNTIME_ERROR 4
 
-extern int debug;
+extern int debug, errno;
 
 void signal_handler(int signal) {
     fprintf(stderr, "SIGPIPE received, exiting\n");
