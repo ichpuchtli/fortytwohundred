@@ -18,7 +18,7 @@
 #define CMD_NONE ((uint8_t)0)
 #define CMD_ACK ((uint8_t)1)
 //...
-#define MAX_CMD_VALUE ((uint8_t)0)
+#define MAX_CMD_VALUE ((uint8_t)1)
 
 const char* command_strings[(size_t)(MAX_CMD_VALUE+1)]={
     "", "ACK"
@@ -61,6 +61,8 @@ char* command2str(uint8_t command) {
 
 void print_packet(struct sockaddr_in* addr_local, struct sockaddr_in* addr_remote, char* pktbuffer, enum PKTDIR dir) {
     char timestr[32]={'\0'};
+    char str_remote[32];
+    char str_local[32];
     char arrow='<';
     time_t rawtime;
     struct tm * timeinfo;
@@ -70,13 +72,13 @@ void print_packet(struct sockaddr_in* addr_local, struct sockaddr_in* addr_remot
     time(&rawtime);
     timeinfo = localtime(&rawtime);
     strftime(timestr,32,"%H:%M:%S",timeinfo);
+    strncpy(str_remote,inet_ntoa(addr_remote->sin_addr),32);
+    strncpy(str_local,inet_ntoa(addr_local->sin_addr),32);
 
     d2("[%u] %s | %s:%u %c %s %c %s:%u | seq=%u len=%u\n", 
-        getpid(), timestr, inet_ntoa(addr_remote->sin_addr), 
-        ntohs(addr_remote->sin_port), arrow, 
+        getpid(), timestr, str_remote, ntohs(addr_remote->sin_port), arrow, 
         command2str(pktbuffer[0]), arrow, inet_ntoa(addr_local->sin_addr), 
-        ntohs(addr_local->sin_port), pktbuffer[1], 
-        ntohs((uint16_t)pktbuffer[2]));
+        str_local, pktbuffer[1], ntohs((uint16_t)pktbuffer[2]));
 }
 
 #endif
