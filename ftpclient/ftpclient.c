@@ -52,7 +52,7 @@ void process_address(struct addrinfo **addr, char *hostname, char *port) {
 
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
     hints.ai_protocol = 0;
     hints.ai_canonname = NULL;

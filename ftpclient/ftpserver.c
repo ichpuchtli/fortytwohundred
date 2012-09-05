@@ -195,11 +195,11 @@ void signal_handler(int sig) {
                 if (status != 0) {
                     d("Child %d exited with status %d\n", pid, status);
                 } else {
-                    d("Child %d exited normally\n");
+                    d("Child %d exited normally\n", pid);
                 }
             }
         }
-        if (errno != ECHILD) {
+        if (errno != ECHILD && pid < 0) {
             perror("Error attempting to reap child");
         }
     }
