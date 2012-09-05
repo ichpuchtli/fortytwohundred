@@ -72,13 +72,15 @@ void print_packet(struct sockaddr_in* addr_local, struct sockaddr_in* addr_remot
     time(&rawtime);
     timeinfo = localtime(&rawtime);
     strftime(timestr,32,"%H:%M:%S",timeinfo);
+
     strncpy(str_remote,inet_ntoa(addr_remote->sin_addr),32);
     strncpy(str_local,inet_ntoa(addr_local->sin_addr),32);
 
     d2("[%u] %s | %s:%u %c %s %c %s:%u | seq=%u len=%u\n", 
         getpid(), timestr, str_remote, ntohs(addr_remote->sin_port), arrow, 
-        command2str(pktbuffer[0]), arrow, inet_ntoa(addr_local->sin_addr), 
-        str_local, pktbuffer[1], ntohs((uint16_t)pktbuffer[2]));
+        command2str(pktbuffer[0]), arrow, str_local, 
+        ntohs(addr_local->sin_port), pktbuffer[1], 
+        ntohs((uint16_t)(pktbuffer[2])));
 }
 
 #endif
