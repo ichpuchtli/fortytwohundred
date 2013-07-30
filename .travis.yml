@@ -2,8 +2,8 @@ install:
   - svn checkout http://googletest.googlecode.com/svn/trunk gtest
 
 compiler:
-  -gcc
-  -clang
+  - gcc
+  - clang
 
 script:
   - mkdir build
