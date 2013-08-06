@@ -1,4 +1,4 @@
-#ifdef _SRTP_H_
+#ifndef _SRTP_H_
 #define _SRTP_H_
 
 #include <arpa/inet.h>
