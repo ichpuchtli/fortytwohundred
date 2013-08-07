@@ -1,12 +1,7 @@
-install:
-  - svn checkout http://googletest.googlecode.com/svn/trunk gtest
-
 compiler:
   - gcc
   - clang
 
 script:
-  - mkdir build
-  - cd build
-  - cmake ..
   - make && make test
+  - tests/shell_tests.sh
