@@ -1,37 +1,25 @@
-# Example makefile for linking against strp
 
-#SRTPLIB_DIR=srtp/lib
-#LDFLAGS += -Wl,-rpath,${SRTPLIB_DIR}
-#LDFLAGS += -L${SRTPLIB_DIR} -lsrtp
-#
-#test : srtp test.c
-#		${CC} ${LDFLAGS} test.c -o test
-
-CXXFLAGS += -pedantic -Wall -Wextra -O3 -g
-
-ifeq (${CC}, gcc)
-CXXFLAGS += -std=gnu99
-else
-CXXFLAGS += -std=c++0x
-endif
-
-ifeq (${CC}, clang)
-CXXFLAGS += -std=gnu99
-endif
+# Linking example
+#SRTP_LIB=srtp/lib/libsrtp.a
+#test : test.c
+#		${CXX} ${LDFLAGS} $^ -o $@ ${SRTP_LIB}
 
 OUTPUT_DIR=lib
-TARGET=libsrtp.so
 
-all : directories ${TARGET}
+CXXFLAGS += -pedantic -Wall -Wextra -g -std=c++0x -fPIC
 
-${TARGET}: srtp.h srtp.c srtp_impl.h
-		${CC} ${CXXFLAGS} -fPIC -shared -o ${OUTPUT_DIR}/$@ srtp.c
+all : mk_out_dir srtp.o
+
+srtp.o: srtp.h srtp.cpp srtp_impl.h
+	${CXX} ${CXXFLAGS} -c -o ${OUTPUT_DIR}/srtp.o srtp.cpp
+	ar -rv ${OUTPUT_DIR}/libsrtp.a ${OUTPUT_DIR}/srtp.o
 
 clean:
-		rm -f ${OUTPUT_DIR}/$@
+	rm -f ${OUTPUT_DIR}/srtp.o ${OUTPUT_DIR}/libsrtp.a
+	rmdir ${OUTPUT_DIR}
 
-.PHONY: directories
-directories: ${OUTPUT_DIR}
+.PHONY: mk_out_dir
+mk_out_dir: ${OUTPUT_DIR}
 
 ${OUTPUT_DIR}:
 		mkdir -p ${OUTPUT_DIR}
