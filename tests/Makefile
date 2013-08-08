@@ -24,8 +24,8 @@ build_tests: ${TEST_SOURCES}
 build_gtest: checkout_gtest build_gtest_libs
 
 build_gtest_libs: mk_gtest_build_dir
-	${CXX} ${CXXFLAGS} -I ${GTEST_SRC_DIR}/include -I ${GTEST_SRC_DIR} -c ${GTEST_SRC_DIR}/src/gtest-all.cc 
-	${CXX} ${CXXFLAGS} -I ${GTEST_SRC_DIR}/include -I ${GTEST_SRC_DIR} -c ${GTEST_SRC_DIR}/src/gtest_main.cc
+	${CXX} -I ${GTEST_SRC_DIR}/include -I ${GTEST_SRC_DIR} -c ${GTEST_SRC_DIR}/src/gtest-all.cc 
+	${CXX} -I ${GTEST_SRC_DIR}/include -I ${GTEST_SRC_DIR} -c ${GTEST_SRC_DIR}/src/gtest_main.cc
 	ar -rv ${GTEST_LIB_DIR}/libgtest.a gtest-all.o
 	ar -rv ${GTEST_LIB_DIR}/libgtest_main.a gtest_main.o
 	rm -f gtest-all.o gtest_main.o
