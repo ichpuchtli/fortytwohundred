@@ -5,6 +5,7 @@ SRTP_LIB_ARC=${SRTP_LIB_DIR}/libsrtp.a
 GTEST_SRC_DIR=gtest
 GTEST_LIB_DIR=build
 GTEST_GET=svn checkout http://googletest.googlecode.com/svn/trunk ${GTEST_SRC_DIR}
+GTEST_WGET=wget https://googletest.googlecode.com/files/gtest-1.6.0.zip; unzip gtest-1.6.0.zip ; mv gtest-1.6.0 ${GTEST_SRC_DIR}
 
 TEST_SOURCES=$(wildcard *_test.cpp)
 TEST_LIBS += ${SRTP_LIB_ARC} ${GTEST_LIB_DIR}/libgtest_main.a ${GTEST_LIB_DIR}/libgtest.a 
@@ -40,7 +41,7 @@ clean:
 checkout_gtest: ${GTEST_SRC_DIR}
 
 ${GTEST_SRC_DIR}:
-	${GTEST_GET}
+	${GTEST_WGET}
 
 
 .PHONY: mk_gtest_build_dir
