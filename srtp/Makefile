@@ -10,12 +10,13 @@ CXXFLAGS += -pedantic -Wall -Wextra -g -std=c++0x -fPIC
 
 all : mk_out_dir srtp.o
 
-srtp.o: srtp.h srtp.cpp srtp_impl.h
+srtp.o: srtp.h srtp.cpp srtp_impl.h srtp_impl.cpp
+	${CXX} ${CXXFLAGS} -c -o ${OUTPUT_DIR}/srtp_impl.o srtp_impl.cpp
 	${CXX} ${CXXFLAGS} -c -o ${OUTPUT_DIR}/srtp.o srtp.cpp
-	ar -rv ${OUTPUT_DIR}/libsrtp.a ${OUTPUT_DIR}/srtp.o
+	ar -rv ${OUTPUT_DIR}/libsrtp.a ${OUTPUT_DIR}/srtp.o ${OUTPUT_DIR}/srtp_impl.o
 
 clean:
-	rm -f ${OUTPUT_DIR}/srtp.o ${OUTPUT_DIR}/libsrtp.a
+	rm -f ${OUTPUT_DIR}/srtp.o ${OUTPUT_DIR}/srtp_impl.o ${OUTPUT_DIR}/libsrtp.a
 	rmdir ${OUTPUT_DIR}
 
 .PHONY: mk_out_dir
