@@ -3,7 +3,13 @@
 #include "../srtp/srtp.h"
 
 #define TEST_MESSAGE "Hello World!\r\n"
-#define TEST_PORT ( 4000 )
+#define TEST_PORT ( 8080 )
+
+char* loopback_addr( void ) {
+  char* addr = getenv( "IP" );
+
+  return ( addr ) ? addr : ( char* ) "127.0.0.1" ;
+}
 
 void reuse_addr( int sock ){
   int tmp = 1;
@@ -30,7 +36,7 @@ void* echo_client( void* param ){
   char buffer[ 64 ];
   ( void ) param;
 
-  sock_fd = IPv4_connect( TEST_PORT, "127.0.0.1" ); 
+  sock_fd = IPv4_connect( TEST_PORT, loopback_addr() ); 
 
   if ( sock_fd < 0 ){
     perror( "echo client" );
@@ -88,7 +94,7 @@ TEST( ListenTest, IPv4BoundListen ) {
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_port = htons ( TEST_PORT );
-  addr.sin_addr.s_addr = htonl ( INADDR_ANY );
+  addr.sin_addr.s_addr = inet_addr( loopback_addr() );
 
   int bind_result = srtp_bind( sock_fd, ( struct sockaddr* ) &addr, sizeof( struct sockaddr_in ) );
 
@@ -124,7 +130,7 @@ TEST( ListenTest, ClientServerCommunication ) {
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_port = htons ( TEST_PORT );
-  addr.sin_addr.s_addr = htonl ( INADDR_ANY );
+  addr.sin_addr.s_addr = inet_addr( loopback_addr() );
 
   int bind_result = srtp_bind( sock_fd, ( struct sockaddr* ) &addr, sizeof( struct sockaddr_in ) );
 
@@ -155,3 +161,4 @@ TEST( ListenTest, ClientServerCommunication ) {
 
   if ( sock_fd > 0 ) close( sock_fd );
 }
+
