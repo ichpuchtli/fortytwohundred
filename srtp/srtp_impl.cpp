@@ -96,8 +96,6 @@ int _srtp_shutdown( int socket, int how ){
   return 0;
 }
 
-int _srtp_getpeername( int socket, struct sockaddr* address, socklen_t* address_len ){return 0;}
-
 int _srtp_send( int socket, const void* message, size_t length, int flags ){
   
   // write to fifo  

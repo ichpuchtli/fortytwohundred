@@ -51,14 +51,6 @@ int srtp_shutdown( int socket, int how ){
   #endif
 }
 
-int srtp_getpeername( int socket, struct sockaddr* address, socklen_t* address_len ){
-  #ifdef USE_STD_TCP
-    return getpeername( socket, address, address_len );
-  #else
-    return _srtp_getpeername( socket, address, address_len );
-  #endif
-}
-
 int srtp_send( int socket, const void* message, size_t length, int flags ){
   #ifdef USE_STD_TCP
     return send( socket, message, length, flags );
