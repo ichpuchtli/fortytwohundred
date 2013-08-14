@@ -26,12 +26,12 @@ enum srtp_cmd_t {
  *   srtp_header_t* header = ( srtp_header_t* ) buffer;
  * 
  *   header->cmd = SYN;
- *   header->reserved = sequence;
- *   header->len = len;
+ *   header->sequence= sequence;
+ *   header->len = sizeof(srtp_header_t);
  * 
- *   memcpy( &header->data, data, len );
+ *   memcpy( buffer + header->len, data, len );
  * 
- *   return sizeof( srtp_header_t ) + len - 1; // -1 for utilizing data entry
+ *   return header->len + len;
  * }
  * 
  * char buffer[ udp_max_size ];
@@ -44,11 +44,11 @@ enum srtp_cmd_t {
  */
 struct srtp_header_t {
 
-   srtp_cmd_t cmd;
-   uint32_t reserved;
-
-   uint32_t len; // end of data should equal &data + len
-   uint8_t data; // &data == start of data
+  uint8_t cmd;  // srtp_cmd_t
+  uint8_t len; // length of header
+  uint16_t sequence; // sequence number
+  uint16_t ack; // ack number
+  uint16_t checksum; // checksum
 
 };
 
