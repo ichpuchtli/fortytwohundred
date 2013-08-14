@@ -1,6 +1,12 @@
-compiler:
-  - gcc
-  - clang
+branches:
+  only:
+    - master
+    - srtp
+
+env:
+  matrix:
+    - CXX=clang++
+    - CXX=g++
 
 script:
   - make && make test
