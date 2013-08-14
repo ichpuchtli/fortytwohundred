@@ -1,4 +1,4 @@
-all: srtp ftpclient ftpserver
+all: srtp ftclient ftserver
 
 SRTP_SRC_DIR=../srtp
 SRTP_LIB_DIR=../srtp/lib
@@ -7,11 +7,11 @@ SRTP_LIB_ARC=../srtp/lib/libsrtp.a
 srtp:
 		make -C ${SRTP_SRC_DIR}
 
-ftpclient: ftpclient.cpp
+ftclient: ftpclient.cpp
 	${CXX} -o $@ $^ ${SRTP_LIB_ARC}
 
-ftpserver: ftpserver.cpp
+ftserver: ftpserver.cpp
 	${CXX} -o $@ $^ ${SRTP_LIB_ARC}
 
 clean:
-	rm -f ftpserver ftpclient
+	rm -f ftserver ftclient
