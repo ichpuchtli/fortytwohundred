@@ -8,10 +8,10 @@ srtp:
 		make -C ${SRTP_SRC_DIR}
 
 ftclient: ftpclient.cpp debug.h
-	${CXX} -o $@ $^ ${SRTP_LIB_ARC}
+	${CXX} -o $@ ftpclient.cpp ${SRTP_LIB_ARC}
 
 ftserver: ftpserver.cpp debug.h
-	${CXX} -o $@ $^ ${SRTP_LIB_ARC}
+	${CXX} -o $@ ftpserver.cpp ${SRTP_LIB_ARC}
 
 clean:
 	rm -f ftserver ftclient
