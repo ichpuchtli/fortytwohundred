@@ -6,11 +6,14 @@
 #include <wait.h>
 #include <unistd.h>
 #include "../srtp/srtp.h"
+#include "debug.h"
 
 #define USAGE "USAGE: %s [-d] port\n"
 #define BAD_ARGS 1
 #define BAD_PORT 2
 #define RUNTIME_ERROR 4
+
+extern int debug;
 
 void process_connections(int listen_fd) {
     while (1) {
@@ -28,14 +31,15 @@ void process_connections(int listen_fd) {
             
             /* check file doesn't already exist */
             
-            
+            /* open new port for client */
+                      
             /* recieve chunks and ACK them */
-
-            fprintf(stdout, "child closing\n");
+            
+            d("Child terminating\n");
             close(conn);
             exit(0);
         } else {
-            fprintf(stdout, "accepted connection, child starting %d\n", pid);
+            d("Accepted connection, child starting with PID %d\n", pid);
             close(conn);
         }
         
@@ -46,7 +50,12 @@ void signal_handler(int sig) {
     int status;
     if (sig == SIGCHLD) {
         while (waitpid(-1, &status, WNOHANG) > 0) {
-            fprintf(stdout, "child reaped\n");
+            if (WIFEXITED(status)) {
+                d("Child reaped, exit status:%d\n", WEXITSTATUS(status));
+            } else {
+                d("Child reaped, child exited abnormally.. signal:%d\n",
+                        WTERMSIG(status));
+            }
         }
     }
 }
@@ -58,7 +67,7 @@ int setup_socket(int *sock, int port) {
         perror("Error opening socket");
         return 1;
     }
-    fprintf(stdout, "socket fd: %d\n", *sock);
+    d("Socket fd: %d\n", *sock);
     /* be nice for reuse in case of testing */
     int opt = 1;
     if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int)) == -1) {
@@ -87,7 +96,6 @@ int setup_socket(int *sock, int port) {
 }
 
 int main(int argc, char **argv){
-    int debug = 0;
     unsigned int port = 0;
 
     if (argc == 3) {
@@ -116,13 +124,14 @@ int main(int argc, char **argv){
                 "port in the range 1 to 65535\n", argv[2 + debug]);
         return BAD_PORT;
     }
+    d("Port valid: %d\n", port);
     
     /* set up the socket */
     int socket_fd = 0;
     if (setup_socket(&socket_fd, port) != 0) {
         return RUNTIME_ERROR;
     }
- 
+    d("Socket created successfully\n");
     /* register signal handlers before we get carried away*/
     struct sigaction signals;
     signals.sa_handler = signal_handler;

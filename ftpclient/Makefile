@@ -7,10 +7,10 @@ SRTP_LIB_ARC=../srtp/lib/libsrtp.a
 srtp:
 		make -C ${SRTP_SRC_DIR}
 
-ftclient: ftpclient.cpp
+ftclient: ftpclient.cpp debug.h
 	${CXX} -o $@ $^ ${SRTP_LIB_ARC}
 
-ftserver: ftpserver.cpp
+ftserver: ftpserver.cpp debug.h
 	${CXX} -o $@ $^ ${SRTP_LIB_ARC}
 
 clean:
