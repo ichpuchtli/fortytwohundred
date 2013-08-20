@@ -11,9 +11,89 @@
 #define USAGE "USAGE: %s [-d] port\n"
 #define BAD_ARGS 1
 #define BAD_PORT 2
-#define RUNTIME_ERROR 4
+#define RUNTIME_ERROR 3
+#define BAD_REQUEST 4
+#define FILE_EXISTS 5
+#define CANNOT_CREATE 6
+#define BAD_SIZE 7
 
 extern int debug;
+
+int copy_file(int in) {
+    FILE *stream = fdopen(in, "r");
+    char buffer[512] = {'\0'}; //WRQ|filename\nsize\n\0
+    long filesize = -1, read = 0;
+    /* read the request type */
+    if (fgets(buffer, 512, stream) == NULL || strlen(buffer) < 6 
+            || strncmp(buffer, "WRQ|", 4) != 0) {
+        d("Request was not of valid format or "
+                "filename was the empty string\n");
+        return BAD_REQUEST;
+    }
+    char *temp = strchr(buffer, '\n');
+    /* newline is missing or newline immediately follows | */
+    if (temp == NULL) {
+        d("Request was not of valid format\n");
+        return BAD_REQUEST;
+    }
+    /* remove the \n so we can use it in our file ops */
+    *temp = '\0';
+    /* strip any leading directories (stop "/etc/passwd" etc) */ 
+    char *filename = strrchr(buffer + 4, '/');
+    if (filename == NULL) {
+        filename = buffer + 4;
+    } else {
+        filename += 1; /* moves it past the '/' char */
+    }
+    d("Valid request recieved: '%s'\n", buffer);
+    /* check file doesn't already exist */
+    if (access(filename, F_OK) != -1) {
+        d("Given file '%s' already exists\n", buffer + 4);
+        return FILE_EXISTS;
+    }
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        perror("Error opening file for writing");
+        return CANNOT_CREATE;
+    }
+    char dummy = '\0';
+    if (fgets(buffer, 512, stream) == NULL 
+            || sscanf(buffer, "%ld%c", &filesize, &dummy) != 2 
+            || filesize < 0 || dummy != '\n') {
+        d("Given size missing or invalid\n");
+        return BAD_REQUEST;
+    }
+    
+    /* read enough bytes */
+    while (read < filesize) {
+        int chunksize = (filesize - read > 512) ? 512 : filesize - read;
+        int actual = fread(buffer, sizeof(char), chunksize, stream);
+        read += actual;
+        if (actual < chunksize) {
+            if (feof(stream)) {
+                d("Unexpected end of file reached\n");
+                return BAD_SIZE;
+            } else if (ferror(stream)) {
+                d("Error encountered while reading file\n");
+                return RUNTIME_ERROR;
+            }
+        } else {
+            int written = fwrite(buffer, sizeof(char), actual, file);
+            if (written != actual) {
+                perror("Local write");
+                d("Writing to local file failed\n");
+                return RUNTIME_ERROR;
+            }
+        }
+    }
+    if (fgetc(stream) != EOF) {
+        d("Extra data recieved\n");
+        return BAD_SIZE;
+    }
+    d("File transfer complete\n");
+    fclose(file);
+    return 0;
+}
 
 void process_connections(int listen_fd) {
     while (1) {
@@ -27,17 +107,13 @@ void process_connections(int listen_fd) {
             continue;
         }
         if ((pid = fork()) == 0) {
-            /* read the request type */
-            
-            /* check file doesn't already exist */
-            
-            /* open new port for client */
-                      
-            /* recieve chunks and ACK them */
-            
+            int result = copy_file(conn);
+            if (result != 0) {
+                fprintf(stderr, "Error encountered while transferring file\n");
+            }
             d("Child terminating\n");
             close(conn);
-            exit(0);
+            exit(result);
         } else {
             d("Accepted connection, child starting with PID %d\n", pid);
             close(conn);

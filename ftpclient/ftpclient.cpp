@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include "debug.h"
 
 #define USAGE "USAGE: %s [-d] server port filename\n"
@@ -16,7 +17,33 @@ extern int debug;
 
 void signal_handler(int signal) {
     fprintf(stderr, "SIGPIPE received, exiting\n");
-    exit(1);
+    exit(RUNTIME_ERROR);
+}
+
+int copy_file(FILE *file, int out, char *filename) {
+    FILE *stream = fdopen(out, "wb");
+    if (stream == NULL) {
+        perror("fdopen(socket_fd)");
+        return RUNTIME_ERROR;
+    }
+    char buffer[512] = {0};
+    struct stat s;
+    stat(filename, &s);
+    long size = s.st_size;
+    fprintf(stream, "WRQ|%s\n%ld\n", filename, size);
+    fflush(stream);
+    d("Request sent\n");
+    long written = 0;
+    while (written < size && !feof(file) && !ferror(file)) {
+        int chunksize = fread(buffer, sizeof(char), 512, file);
+        if (fwrite(buffer, sizeof(char), chunksize, stream) != chunksize) {
+            d("Error writing to network stream\n");
+            return RUNTIME_ERROR;
+        }
+    }
+    fflush(stream);
+    d("File transfer complete\n");
+    return 0;
 }
 
 int main(int argc, char **argv){
@@ -49,7 +76,7 @@ int main(int argc, char **argv){
     }
     d("Port OK: %d\n", port);
     /* check the file */
-    if ((file = fopen(argv[3 + debug], "r")) == NULL) {
+    if ((file = fopen(argv[3 + debug], "rb")) == NULL) {
         perror("Error opening given file");
         return BAD_FILE;
     }
@@ -80,9 +107,9 @@ int main(int argc, char **argv){
     freeaddrinfo(addr);
     d("Connected successfully\n");
     /* request to write (reads not required in the assignment) */
-    
-    sleep(5);
+    copy_file(file, sock, argv[3 + debug]);
     d("Exiting without errors\n");
     fclose(file);
+    close(sock);
     return 0;
 }
