@@ -6,7 +6,6 @@ branches:
 env:
   matrix:
     - CXX=clang++
-    - CXX=g++
     - CXXFLAGS=-DUSE_STD_TCP
     - CXXFLAGS=
 
