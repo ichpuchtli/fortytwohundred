@@ -1,8 +1,6 @@
 #include "srtp.h"
 #include "srtp_impl.h"
 
-#define USE_STD_TCP
-
 int srtp_socket( int domain, int type, int protocol ){
   #ifdef USE_STD_TCP
     return socket( domain, type, protocol );
