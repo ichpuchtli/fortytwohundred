@@ -18,8 +18,4 @@ extern int _srtp_connect( int socket, const struct sockaddr* address, socklen_t 
 
 extern int _srtp_shutdown( int socket, int how );
 
-extern int _srtp_send( int socket, const void* message, size_t length, int flags );
-
-extern int _srtp_recv( int socket, void* buffer, size_t length, int flags );
-
 #endif // _SRTP_IMPL_H_

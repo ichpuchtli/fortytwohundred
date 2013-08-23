@@ -48,19 +48,3 @@ int srtp_shutdown( int socket, int how ){
     return _srtp_shutdown( socket, how );
   #endif
 }
-
-int srtp_send( int socket, const void* message, size_t length, int flags ){
-  #ifdef USE_STD_TCP
-    return send( socket, message, length, flags );
-  #else
-    return _srtp_send( socket, message, length, flags );
-  #endif
-}
-
-int srtp_recv( int socket, void* buffer, size_t length, int flags ){
-  #ifdef USE_STD_TCP
-    return recv( socket, buffer, length, flags );
-  #else
-    return _srtp_recv( socket, buffer, length, flags );
-  #endif
-}

@@ -173,21 +173,6 @@ int _srtp_shutdown( int socket, int how ){
   return 0;
 }
 
-int _srtp_send( int socket, const void* message, size_t length, int flags ){
-
-  // write to fifo  
-  // identical to write(fd, message, length)
-  
-  return 0;
-}
-
-int _srtp_recv( int socket, void* buffer, size_t length, int flags ){
-  
-  // read from fifo
-  // identical to read(fd, buffer, length)
-  return 0;
-}
-
 void send_conn_request(int fd, const struct sockaddr* addr, socklen_t addr_len){
   
   char pkt_buf[64];
@@ -195,3 +180,4 @@ void send_conn_request(int fd, const struct sockaddr* addr, socklen_t addr_len){
   sendto(fd, pkt_buf, 64, 0, addr, addr_len);
   
 }
+
