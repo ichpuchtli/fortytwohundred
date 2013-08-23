@@ -1,8 +1,6 @@
 #include "srtp.h"
 #include "srtp_impl.h"
 
-#define USE_STD_TCP
-
 int srtp_socket( int domain, int type, int protocol ){
   #ifdef USE_STD_TCP
     return socket( domain, type, protocol );
@@ -48,14 +46,6 @@ int srtp_shutdown( int socket, int how ){
     return shutdown( socket, how );
   #else
     return _srtp_shutdown( socket, how );
-  #endif
-}
-
-int srtp_getpeername( int socket, struct sockaddr* address, socklen_t* address_len ){
-  #ifdef USE_STD_TCP
-    return getpeername( socket, address, address_len );
-  #else
-    return _srtp_getpeername( socket, address, address_len );
   #endif
 }
 
