@@ -15,6 +15,7 @@
 // C++ Headers
 #include <map>
 #include <queue>
+#include <set>
 
 void send_conn_request(int fd, const struct sockaddr* addr, socklen_t dest_len);
 
@@ -30,6 +31,8 @@ struct Conn_t {
   socklen_t addr_len;
 
 };
+
+std::map<std::string, int> hash2fd;
 
 // fifo fd -> connection structure
 std::map<int, struct Conn_t*> fd2conn;
@@ -53,18 +56,40 @@ void* server_proxy( void* param ){
   int n;
   char buffer[ 1024 ];
 
+  unsigned char sha1_buf[ 40 ];
+
   while ( 1 ) {
 
     n = recvfrom( conn->sock, buffer, 1024, 0,( struct sockaddr* ) &src_addr, &src_addr_len );
 
-    // if addr is unique
-    //   fifo = srtp_socket
-    //   conn = fd2cnn[fifo]
-    //   memcpy(conn->addr, &src_addr, src_addr_len);
-    //   conn->addr_len = src_addr_len;
-    //   write(fifo, buffer, n);
-    //   new_conns.push(fifo);
-    ( void ) n;
+    SHA1( ( unsigned char* ) &src_addr, src_addr_len, sha1_buf );
+
+    std::string shasum( ( char* ) sha1_buf, ( size_t ) src_addr_len );
+
+    if ( hash2fd.find( shasum ) == hash2fd.end() ){
+
+      int fifo = _srtp_socket( 0, 0, 0 );
+
+      struct Conn_t* conn = fd2conn[ fifo ];
+
+      memcpy(&conn->addr, &src_addr, src_addr_len);
+
+      conn->addr_len = src_addr_len;
+
+      write(fifo, buffer, n);
+
+      new_conns.push(fifo);
+
+      hash2fd.insert( {shasum, fifo} );
+
+    }else{
+
+      int fifo = hash2fd[ shasum ];
+
+      write( fifo, buffer, n );
+
+    }
+
   }
 
   return NULL;
