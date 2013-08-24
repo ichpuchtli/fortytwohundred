@@ -16,6 +16,7 @@
 #include <map>
 #include <queue>
 #include <set>
+#include <string>
 
 void send_conn_request(int fd, const struct sockaddr* addr, socklen_t dest_len);
 
