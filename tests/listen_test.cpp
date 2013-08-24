@@ -1,8 +1,13 @@
 #include "gtest/gtest.h"
 
+#include "stdio.h"
+#include "stdlib.h"
+#include "unistd.h"
+
 #include "../srtp/srtp.h"
 
 #define TEST_MESSAGE "Hello World!\r\n"
+#define TEST_MESG_LEN (14)
 #define TEST_PORT ( 8080 )
 
 char* loopback_addr( void ) {
@@ -30,7 +35,7 @@ int IPv4_connect( int port, char* host ){
   return ( connect_result == 0 ) ? sock_fd : -1; 
 }
 
-void* echo_client( void* param ){
+void* write_client( void* param ){
 
   int n, sock_fd;
   char buffer[ 64 ];
@@ -43,15 +48,12 @@ void* echo_client( void* param ){
     return NULL;
   }
 
-  n = read ( sock_fd, buffer, 64 );
-
-  write ( sock_fd, buffer, n );
+  write ( sock_fd, TEST_MESSAGE, strlen(TEST_MESSAGE) );
 
   close( sock_fd );
 
   return NULL;
 }
-
 
 TEST( ListenTest, IPv6BoundListen ) {
 
@@ -61,7 +63,7 @@ TEST( ListenTest, IPv6BoundListen ) {
 
   reuse_addr( sock_fd );
 
-  ASSERT_TRUE( sock_fd > 0 );
+  ASSERT_GT( sock_fd , 0 );
 
   struct sockaddr_in6 addr;
   addr.sin6_family = AF_INET6;
@@ -71,11 +73,11 @@ TEST( ListenTest, IPv6BoundListen ) {
 
   int bind_result = srtp_bind( sock_fd, ( struct sockaddr* ) &addr, sizeof( struct sockaddr_in6 ) );
 
-  EXPECT_TRUE( bind_result == 0 );
+  EXPECT_EQ( bind_result, 0 );
 
   int listen_result = srtp_listen( sock_fd, 0 );
 
-  EXPECT_TRUE( listen_result == 0 );
+  EXPECT_EQ(listen_result, 0 );
 
   close( sock_fd );
 
@@ -89,7 +91,7 @@ TEST( ListenTest, IPv4BoundListen ) {
 
   reuse_addr( sock_fd );
 
-  ASSERT_TRUE( sock_fd > 0 );
+  ASSERT_GT( sock_fd , 0 );
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -98,21 +100,39 @@ TEST( ListenTest, IPv4BoundListen ) {
 
   int bind_result = srtp_bind( sock_fd, ( struct sockaddr* ) &addr, sizeof( struct sockaddr_in ) );
 
-  EXPECT_TRUE( bind_result == 0 );
+  EXPECT_EQ( bind_result, 0 );
 
   int listen_result = srtp_listen( sock_fd, 0 );
 
-  EXPECT_TRUE( listen_result == 0 );
+  EXPECT_EQ( listen_result, 0 );
 
   close( sock_fd );
 
 }
 
-TEST(ListenTest, Argument_Test) {
+TEST(ListenTest, SockIOTest) {
 
-  EXPECT_TRUE( srtp_listen( -1, 0 ) < 0 );
+  int sock_fd = srtp_socket(AF_INET, SOCK_STREAM, 0);
 
-  EXPECT_TRUE( srtp_listen( -1, -1 ) < 0 );
+  EXPECT_GT( sock_fd , 0 );
+
+	int bytes = write(sock_fd, "Test\n", 6);
+	
+	EXPECT_EQ( bytes , 6 );
+	
+}
+
+TEST(ListenTest, InvalidSockTest) {
+
+  EXPECT_LT( srtp_socket( -1, -1, -1 ) , 0 );
+  
+  EXPECT_LT( srtp_bind(-1, NULL , NULL) , 0 );
+  
+  EXPECT_LT( srtp_listen( -1, 0 ) , 0 );
+  
+  EXPECT_LT( srtp_connect( -1, NULL, NULL ) , 0 );
+  
+  EXPECT_LT( srtp_accept( -1, NULL, NULL) , 0 );
 }
 
 TEST( ListenTest, ClientServerCommunication ) {
@@ -122,10 +142,10 @@ TEST( ListenTest, ClientServerCommunication ) {
   int sock_fd;
 
   sock_fd = srtp_socket(AF_INET, SOCK_STREAM, 0);
-
-  reuse_addr( sock_fd );
-
-  ASSERT_TRUE( sock_fd > 0 );
+  
+  //reuse_addr( sock_fd );
+  
+  ASSERT_GT( sock_fd, 0 );
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -133,25 +153,23 @@ TEST( ListenTest, ClientServerCommunication ) {
   addr.sin_addr.s_addr = inet_addr( loopback_addr() );
 
   int bind_result = srtp_bind( sock_fd, ( struct sockaddr* ) &addr, sizeof( struct sockaddr_in ) );
-
-  ASSERT_TRUE( bind_result == 0 );
+  
+  ASSERT_EQ( bind_result, 0 );
 
   int listen_result = srtp_listen( sock_fd, 0 );
 
-  ASSERT_TRUE( listen_result == 0 );
+  ASSERT_EQ( listen_result, 0 );
 
-  pthread_create( &id, NULL, echo_client, NULL );
-
+  pthread_create( &id, NULL, write_client, NULL );
+  
   struct sockaddr_in client_addr;
   socklen_t socklen = sizeof( struct sockaddr_in );
 
   int client_fd = srtp_accept( sock_fd, ( struct sockaddr* ) &client_addr, &socklen );
-
-  ASSERT_TRUE(client_fd > 0 );
+  
+  ASSERT_GT(client_fd, 0 );
 
   char buffer[ 64 ];
-
-  write( client_fd, TEST_MESSAGE, strlen( TEST_MESSAGE ) );
 
   read( client_fd, buffer, 64 );
 
@@ -161,4 +179,3 @@ TEST( ListenTest, ClientServerCommunication ) {
 
   if ( sock_fd > 0 ) close( sock_fd );
 }
-

@@ -8,7 +8,7 @@ GTEST_GET=svn checkout http://googletest.googlecode.com/svn/trunk ${GTEST_SRC_DI
 GTEST_WGET=wget https://googletest.googlecode.com/files/gtest-1.6.0.zip; unzip gtest-1.6.0.zip ; mv gtest-1.6.0 ${GTEST_SRC_DIR}
 
 TEST_SOURCES=$(wildcard *_test.cpp)
-TEST_LIBS += ${SRTP_LIB_ARC} ${GTEST_LIB_DIR}/libgtest_main.a ${GTEST_LIB_DIR}/libgtest.a 
+TEST_LIBS += ${SRTP_LIB_ARC} ${GTEST_LIB_DIR}/libgtest_main.a ${GTEST_LIB_DIR}/libgtest.a -lssl -lcrypto 
 TEST_TARGET=runtests
 
 CXXFLAGS += -pedantic -Wall -Wextra -g -std=c++0x
