@@ -44,7 +44,7 @@ TEST(IntegrityTest, InvalidSocket) {
 
   int sock = srtp_socket( AF_INET, SOCK_STREAM, 0 );
 
-  EXPECT_GT( srtp_bind(sock, ( struct sockaddr* ) &addr , ( socklen_t ) sizeof(  struct sockaddr_in ) ) , 0 );
+  EXPECT_EQ( srtp_bind(sock, ( struct sockaddr* ) &addr , ( socklen_t ) sizeof(  struct sockaddr_in ) ) , 0 );
 
   close( sock );
 
