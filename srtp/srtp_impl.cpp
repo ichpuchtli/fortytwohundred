@@ -20,6 +20,10 @@
 
 void send_conn_request(int fd, const struct sockaddr* addr, socklen_t dest_len);
 
+inline bool isValidFD(int fd);
+inline bool isOpenSRTPSock(int fifo_fd);
+inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len);
+
 struct Conn_t {
 
   pthread_t tid;
@@ -139,14 +143,15 @@ int _srtp_socket( int domain, int type, int protocol ){
 
   char filename[32];
 
-  sprintf(filename, "tmpfifo%05d", fifo_id++);
+  int errcode;
 
-  int errcode = mkfifo(filename, FIFO_PERMISSIONS );
+  do {
 
-  if(errcode){
-    perror("_srtp_socket[mkfifo]");
-    return -1;
-  }
+    sprintf(filename, "tmpfifo%05d", fifo_id++);
+
+    errcode = mkfifo(filename, FIFO_PERMISSIONS );
+
+  } while(errcode);
 
   // Read/Write here however it is expected that server will only read and
   // client only write
@@ -158,7 +163,7 @@ int _srtp_socket( int domain, int type, int protocol ){
     return -1;
   }
 
-  struct Conn_t* conn = (struct Conn_t*) malloc(sizeof(struct Conn_t));
+  struct Conn_t* conn = (struct Conn_t*) calloc(sizeof(struct Conn_t), sizeof(char));
 
   conn->fifo = fd;
   memcpy(conn->filename, filename, 32);
@@ -173,9 +178,18 @@ int _srtp_listen( int fifo_fd, int backlog ){
 
   ( void ) backlog;
 
+  if( ! isOpenSRTPSock(fifo_fd) ){
+    return -1;
+  }
+
   struct Conn_t* conn = fd2conn[fifo_fd];
 
   conn->sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4
+
+  // Unbound Listen
+  if( !isValidIPAddress((struct sockaddr*) &conn->addr, conn->addr_len) ){
+    return -1;
+  }
 
   bind( conn->sock, ( struct sockaddr* ) &conn->addr, conn->addr_len );
 
@@ -187,6 +201,14 @@ int _srtp_listen( int fifo_fd, int backlog ){
 }
 
 int _srtp_bind( int socket, const struct sockaddr* address, socklen_t address_len ){
+
+  if( ! isOpenSRTPSock(socket) ){
+    return -1;
+  }
+
+  if( ! isValidIPAddress((struct sockaddr*) address, address_len) ){
+    return -1;
+  }
 
   struct Conn_t* conn = fd2conn[socket];
 
@@ -201,7 +223,9 @@ int _srtp_bind( int socket, const struct sockaddr* address, socklen_t address_le
 
 int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len ){
 
-  ( void ) socket;
+  if( ! isOpenSRTPSock(socket) ){
+    return -1;
+  }
 
   while ( new_conns.empty() ); // Do not need lock here since only one consumer
 
@@ -210,9 +234,13 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 
   struct Conn_t* conn = fd2conn[ fifo ];
 
-  memcpy( address, &conn->addr, conn->addr_len );
+  if(address && address_len){
 
-  *address_len = conn->addr_len;
+    memcpy( address, &conn->addr, conn->addr_len );
+
+    *address_len = conn->addr_len;
+
+  }
 
   return fifo;
 
@@ -220,7 +248,15 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 
 int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t address_len ){
 
-  int srtp_sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4 
+  if( ! isOpenSRTPSock(fifo_fd) ){
+    return -1;
+  }
+
+  if( ! isValidIPAddress((struct sockaddr*) address, address_len) ){
+    return -1;
+  }
+
+  int srtp_sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4
 
   // send_conn_request(upd_sock, address, address_len);
   // wait for reply with unique data sink addr
@@ -243,6 +279,10 @@ int _srtp_shutdown( int socket, int how ){
 
   ( void ) how;
 
+  if( ! isOpenSRTPSock(socket) ){
+    return -1;
+  }
+
   struct Conn_t* conn = fd2conn[socket];
 
   close(socket);
@@ -260,3 +300,30 @@ void send_conn_request(int fd, const struct sockaddr* addr, socklen_t addr_len){
 
 }
 
+
+inline bool isValidFD(int fd){
+
+  struct stat statbuf;
+
+  int errcode = fstat(fd, &statbuf);
+
+  return (errcode == 0);
+
+}
+
+inline bool isOpenSRTPSock(int fifo_fd){
+
+  if( !isValidFD(fifo_fd) ) {
+    return false;
+  }
+
+  // fifo_fd found in map
+  return fd2conn.find( fifo_fd ) != fd2conn.end();
+
+}
+
+inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len){
+
+  return addr && (addr_len > 0);
+
+}
