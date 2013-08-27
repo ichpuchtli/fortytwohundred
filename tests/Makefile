@@ -24,12 +24,17 @@ build_tests: ${TEST_SOURCES}
 .PHONY: build_gtest
 build_gtest: checkout_gtest build_gtest_libs
 
-build_gtest_libs: mk_gtest_build_dir
+gtest-all.o:
 	${CXX} -I ${GTEST_SRC_DIR}/include -I ${GTEST_SRC_DIR} -c ${GTEST_SRC_DIR}/src/gtest-all.cc 
+
+gtest_main.o:
 	${CXX} -I ${GTEST_SRC_DIR}/include -I ${GTEST_SRC_DIR} -c ${GTEST_SRC_DIR}/src/gtest_main.cc
+
+build_gtest_arch: gtest-all.o gtest_main.o
 	ar -rv ${GTEST_LIB_DIR}/libgtest.a gtest-all.o
 	ar -rv ${GTEST_LIB_DIR}/libgtest_main.a gtest_main.o
-	rm -f gtest-all.o gtest_main.o
+
+build_gtest_libs: build_gtest_arch mk_gtest_build_dir
 
 test:
 	./${TEST_TARGET}
