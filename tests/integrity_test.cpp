@@ -16,12 +16,13 @@
 
 TEST(IntegrityTest, ExistingFifo) {
 
-  int fd = open( "tmpfifo00000", O_CREAT | O_WRONLY );
-  close( fd );
+  int fd = open( "tmpfifo00000", O_CREAT | O_EXCL | O_RDWR );
+
+  if(fd) close( fd );
 
   EXPECT_GT( srtp_socket( AF_INET, SOCK_STREAM, 0 ), 0 );
 
-  unlink( "tmpfifo00000" );
+  if(fd) unlink("tmpfifo00000");
 
 }
 

@@ -41,7 +41,7 @@ void* write_client( void* param ){
   char buffer[ 64 ];
   ( void ) param;
 
-  sock_fd = IPv4_connect( TEST_PORT, loopback_addr() ); 
+  sock_fd = IPv4_connect( TEST_PORT, loopback_addr() );
 
   if ( sock_fd < 0 ){
     perror( "echo client" );
@@ -49,8 +49,6 @@ void* write_client( void* param ){
   }
 
   write ( sock_fd, TEST_MESSAGE, strlen(TEST_MESSAGE) );
-
-  close( sock_fd );
 
   return NULL;
 }
