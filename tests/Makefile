@@ -8,7 +8,7 @@ GTEST_GET=svn checkout http://googletest.googlecode.com/svn/trunk ${GTEST_SRC_DI
 GTEST_WGET=wget https://googletest.googlecode.com/files/gtest-1.6.0.zip; unzip gtest-1.6.0.zip ; mv gtest-1.6.0 ${GTEST_SRC_DIR}
 
 TEST_SOURCES=$(wildcard *_test.cpp)
-TEST_LIBS += ${SRTP_LIB_ARC} ${GTEST_LIB_DIR}/libgtest_main.a ${GTEST_LIB_DIR}/libgtest.a -lssl -lcrypto 
+TEST_LIBS += ${SRTP_LIB_ARC} ${GTEST_LIB_DIR}/libgtest_main.a ${GTEST_LIB_DIR}/libgtest.a
 TEST_TARGET=runtests
 
 CXXFLAGS += -pedantic -Wall -Wextra -g -std=c++0x
@@ -19,7 +19,7 @@ srtp:
 	make -C ${SRTP_SRC_DIR}
 
 build_tests: ${TEST_SOURCES}
-	${CXX} ${CXXFLAGS} -pthread -I${GTEST_SRC_DIR}/include -o ${TEST_TARGET} $^ ${TEST_LIBS}
+	${CXX} ${CXXFLAGS} -pthread -I${GTEST_SRC_DIR}/include -o ${TEST_TARGET} $^ ${TEST_LIBS} -lssl -lcrypto 
 
 .PHONY: build_gtest
 build_gtest: checkout_gtest build_gtest_libs
