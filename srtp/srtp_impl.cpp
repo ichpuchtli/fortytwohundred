@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <openssl/sha.h>
 #include <pthread.h>
 
@@ -17,6 +18,11 @@
 #include <queue>
 #include <set>
 #include <string>
+
+
+//#define SRTP_DEBUG
+
+#include "srtp_debug.h"
 
 void send_conn_request(int fd, const struct sockaddr* addr, socklen_t dest_len);
 
@@ -63,9 +69,13 @@ void* server_proxy( void* param ){
 
   unsigned char sha1_buf[ 40 ];
 
+  debug("[server_proxy]: listing to port %d on socket %d\n", conn->addr.sin_port, conn->sock );
+
   while ( 1 ) {
 
     n = recvfrom( conn->sock, buffer, 1024, 0,( struct sockaddr* ) &src_addr, &src_addr_len );
+
+    if( n <= 0 ) break;
 
     SHA1( ( unsigned char* ) &src_addr, src_addr_len, sha1_buf );
 
@@ -106,7 +116,9 @@ void* client_proxy(void* param){
 
   struct Conn_t* conn = fd2conn[fifo_fd];
 
-  int read_end = open(conn->filename, O_RDONLY);
+  int read_end = fifo_fd;
+
+  //int read_end = open(conn->filename, O_RDONLY);
   // close read_end on fifo_fd
 
   int n;
@@ -119,7 +131,8 @@ void* client_proxy(void* param){
       sendto(conn->sock, buffer, n, 0, (struct sockaddr*) &conn->addr, sizeof(struct sockaddr_in));
     }
 
-    if( n == 0 ) { // EOF // shutdown
+    if( n < 0 ) { // EOF // shutdown
+      debug("[client_proxy]: EOF closing files\n");
       // send FIN and wait for FINACK
       close(conn->fifo);
       unlink(conn->filename);
@@ -158,7 +171,7 @@ int _srtp_socket( int domain, int type, int protocol ){
   int fd = open(filename, O_RDWR);
 
   if(fd < 0){
-    perror("_srtp_socket[open]");
+    perror("srtp_socket[open]");
     unlink(filename);
     return -1;
   }
@@ -167,6 +180,8 @@ int _srtp_socket( int domain, int type, int protocol ){
 
   conn->fifo = fd;
   memcpy(conn->filename, filename, 32);
+
+  debug("[socket]: new srtp socket %d -> %s\n", conn->fifo, conn->filename );
 
   fd2conn.insert({fd, conn});
 
@@ -194,6 +209,8 @@ int _srtp_listen( int fifo_fd, int backlog ){
   bind( conn->sock, ( struct sockaddr* ) &conn->addr, conn->addr_len );
 
   pthread_create(&conn->tid, NULL, server_proxy, (void*)( long ) fifo_fd);
+
+  debug("[listen]: detaching worker thread\n");
 
   pthread_detach(conn->tid);
 
@@ -242,6 +259,8 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 
   }
 
+  debug("[accept]: accepted new connection from xxx\n");
+
   return fifo;
 
 }
@@ -258,6 +277,8 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
   int srtp_sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4
 
+  debug("[connect]: establishing connection to xxx...\n");
+
   // send_conn_request(upd_sock, address, address_len);
   // wait for reply with unique data sink addr
   //wait_for_conn(&conn->sink_addr, &conn->sink_addr_len);
@@ -267,7 +288,11 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
   memcpy(&conn->addr, address, address_len);
   conn->sock = srtp_sock;
 
+  debug("[connect]: Done.\n");
+
   pthread_create(&conn->tid, NULL, client_proxy, (void*)( long ) fifo_fd);
+
+  debug("[connect]: detaching client worker thread\n");
 
   pthread_detach(conn->tid);
 
@@ -279,6 +304,8 @@ int _srtp_shutdown( int socket, int how ){
 
   ( void ) how;
 
+  debug("[shutdown]: shutting down socket %d due to %d\n", socket, how);
+
   if( ! isOpenSRTPSock(socket) ){
     return -1;
   }
@@ -287,7 +314,11 @@ int _srtp_shutdown( int socket, int how ){
 
   close(socket);
 
+  debug("[shutdown]: joining with worker thread\n");
+
   (void) pthread_join(conn->tid, NULL);
+
+  debug("[shutdown]: shutting down\n");
 
   return 0;
 }
