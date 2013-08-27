@@ -34,7 +34,7 @@ build_gtest_arch: gtest-all.o gtest_main.o
 	ar -rv ${GTEST_LIB_DIR}/libgtest.a gtest-all.o
 	ar -rv ${GTEST_LIB_DIR}/libgtest_main.a gtest_main.o
 
-build_gtest_libs: build_gtest_arch mk_gtest_build_dir
+build_gtest_libs: mk_gtest_build_dir build_gtest_arch
 
 test:
 	./${TEST_TARGET}
