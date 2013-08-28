@@ -6,8 +6,7 @@ branches:
 env:
   matrix:
     - CXX=clang++
-    - CXXFLAGS=-DUSE_STD_TCP
-    - CXXFLAGS=
+    - CXX=g++
 
 script:
   - make && make test
