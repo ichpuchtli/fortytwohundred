@@ -24,7 +24,8 @@
 
 #include "srtp_debug.h"
 
-void send_conn_request(int fd, const struct sockaddr* addr, socklen_t dest_len);
+#include "srtp_util.h"
+
 
 inline bool isValidFD(int fd);
 inline bool isOpenSRTPSock(int fifo_fd);
@@ -73,7 +74,7 @@ void* server_proxy( void* param ){
 
   while ( 1 ) {
 
-    n = recvfrom( conn->sock, buffer, 1024, 0,( struct sockaddr* ) &src_addr, &src_addr_len );
+    n = recv_srtp_data(conn->sock, buffer, 1024, ( struct sockaddr* ) &src_addr, &src_addr_len );
 
     if( n <= 0 ) break;
 
@@ -116,19 +117,13 @@ void* client_proxy(void* param){
 
   struct Conn_t* conn = fd2conn[fifo_fd];
 
-  int read_end = fifo_fd;
-
-  //int read_end = open(conn->filename, O_RDONLY);
-  // close read_end on fifo_fd
-
   int n;
   char buffer[1024];
 
   while(1) { // while(fifo_fd is open) 
 
-    while( ( n = read(read_end, buffer, 1024)) > 0 ) {
-      // n = pack_srtp_packet(mesg, 1024, buffer, n)
-      sendto(conn->sock, buffer, n, 0, (struct sockaddr*) &conn->addr, sizeof(struct sockaddr_in));
+    while( ( n = read(fifo_fd, buffer, 1024)) > 0 ) {
+      (void) send_srtp_data(conn->sock, buffer, n, (struct sockaddr*) &conn->addr, sizeof(struct sockaddr_in));
     }
 
     if( n < 0 ) { // EOF // shutdown
@@ -279,14 +274,13 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
   debug("[connect]: establishing connection to xxx...\n");
 
-  // send_conn_request(upd_sock, address, address_len);
-  // wait for reply with unique data sink addr
-  //wait_for_conn(&conn->sink_addr, &conn->sink_addr_len);
 
   struct Conn_t* conn = fd2conn[fifo_fd];
 
   memcpy(&conn->addr, address, address_len);
   conn->sock = srtp_sock;
+
+  (void) establish_conn( srtp_sock , address, address_len);
 
   debug("[connect]: Done.\n");
 
@@ -312,6 +306,8 @@ int _srtp_shutdown( int socket, int how ){
 
   struct Conn_t* conn = fd2conn[socket];
 
+  (void) shutdown_conn(conn->sock, 0);
+
   close(socket);
 
   debug("[shutdown]: joining with worker thread\n");
@@ -322,15 +318,6 @@ int _srtp_shutdown( int socket, int how ){
 
   return 0;
 }
-
-void send_conn_request(int fd, const struct sockaddr* addr, socklen_t addr_len){
-
-  char pkt_buf[64];
-
-  sendto(fd, pkt_buf, 64, 0, addr, addr_len);
-
-}
-
 
 inline bool isValidFD(int fd){
 
