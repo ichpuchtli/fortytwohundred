@@ -31,3 +31,11 @@ mk_out_dir: ${OUTPUT_DIR}
 
 ${OUTPUT_DIR}:
 		mkdir -p ${OUTPUT_DIR}
+
+debug:
+	@sed -i 's/^#define SRTP_DEBUG/\/\/#define SRTP_DEBUG/g' srtp_impl.cpp
+	@echo "Switched to DEBUG mode"
+
+release:
+	@sed -i 's/^\/\/#define SRTP_DEBUG/#define SRTP_DEBUG/g' srtp_impl.cpp
+	@echo "Switched to RELEASE mode"
