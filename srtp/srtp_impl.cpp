@@ -1,3 +1,5 @@
+#ifndef SRTP_IMPL_CPP
+#define SRTP_IMPL_CPP
 #include "srtp_impl.h"
 
 #include <string.h>
@@ -19,13 +21,11 @@
 #include <set>
 #include <string>
 
-
 //#define SRTP_DEBUG
 
 #include "srtp_debug.h"
 
 #include "srtp_util.h"
-
 
 inline bool isValidFD(int fd);
 inline bool isOpenSRTPSock(int fifo_fd);
@@ -68,7 +68,9 @@ void* server_proxy( void* param ){
   int n;
   char buffer[ 1024 ];
 
-  unsigned char sha1_buf[ 40 ];
+  unsigned char sha1_raw[ 20 ];
+  char sha1_char[ 41 ];
+
 
   debug("[server_proxy]: listing to port %d on socket %d\n", conn->addr.sin_port, conn->sock );
 
@@ -76,13 +78,23 @@ void* server_proxy( void* param ){
 
     n = recv_srtp_data(conn->sock, buffer, 1024, ( struct sockaddr* ) &src_addr, &src_addr_len );
 
-    if( n <= 0 ) break;
+    if( n < 0 ) break; // Connection Terminated
 
-    SHA1( ( unsigned char* ) &src_addr, src_addr_len, sha1_buf );
+    SHA1( ( unsigned char* ) &src_addr, src_addr_len, sha1_raw );
 
-    std::string shasum( ( char* ) sha1_buf, ( size_t ) src_addr_len );
+    for(int i = 0; i < 20; i++){
+      sprintf(&sha1_char[2*i], "%x", sha1_raw[i]);
+    }
+
+    sha1_char[40] = '\0';
+
+    debug("[server_proxy]: new datagram from %s\n", sha1_char);
+
+    std::string shasum( ( char* ) sha1_char, ( size_t ) 40 );
 
     if ( hash2fd.find( shasum ) == hash2fd.end() ){
+
+      debug("[server_proxy]: datagram was unique, creating conection\n");
 
       int fifo = _srtp_socket( 0, 0, 0 );
 
@@ -106,7 +118,11 @@ void* server_proxy( void* param ){
 
     }
 
+    debug("[server_proxy]: datagram contained %d bytes\n", n);
+
   }
+
+  debug( "[server_proxy]: server shutting down\n" );
 
   return NULL;
 }
@@ -117,25 +133,22 @@ void* client_proxy(void* param){
 
   struct Conn_t* conn = fd2conn[fifo_fd];
 
-  int n;
+  int n, sent;
   char buffer[1024];
 
-  while(1) { // while(fifo_fd is open) 
+  while( ( n = read(fifo_fd, buffer, 1024)) > 0 ) {
 
-    while( ( n = read(fifo_fd, buffer, 1024)) > 0 ) {
-      (void) send_srtp_data(conn->sock, buffer, n, (struct sockaddr*) &conn->addr, sizeof(struct sockaddr_in));
-    }
+    debug( "[client_proxy]: sending %d bytes\n", n );
 
-    if( n < 0 ) { // EOF // shutdown
-      debug("[client_proxy]: EOF closing files\n");
-      // send FIN and wait for FINACK
-      close(conn->fifo);
-      unlink(conn->filename);
-      close(conn->sock);
-      break;
-    }
+     sent = send_srtp_data(conn->sock, buffer, n, (struct sockaddr*) &conn->addr, sizeof(struct sockaddr_in));
+
+     if ( sent < 0 ) {
+       break;
+     }
 
   }
+
+  debug( "[client_proxy]: client proxy shutting down\n" );
 
   return NULL;
 }
@@ -189,6 +202,7 @@ int _srtp_listen( int fifo_fd, int backlog ){
   ( void ) backlog;
 
   if( ! isOpenSRTPSock(fifo_fd) ){
+    debug( "[listen]: invalid SRTP socket\n" );
     return -1;
   }
 
@@ -198,6 +212,7 @@ int _srtp_listen( int fifo_fd, int backlog ){
 
   // Unbound Listen
   if( !isValidIPAddress((struct sockaddr*) &conn->addr, conn->addr_len) ){
+    debug( "[listen]: invalid ip address\n" );
     return -1;
   }
 
@@ -215,10 +230,12 @@ int _srtp_listen( int fifo_fd, int backlog ){
 int _srtp_bind( int socket, const struct sockaddr* address, socklen_t address_len ){
 
   if( ! isOpenSRTPSock(socket) ){
+    debug( "[bind]: invalid SRTP socket\n" );
     return -1;
   }
 
   if( ! isValidIPAddress((struct sockaddr*) address, address_len) ){
+    debug( "[bind]: invalid ip address\n" );
     return -1;
   }
 
@@ -236,10 +253,11 @@ int _srtp_bind( int socket, const struct sockaddr* address, socklen_t address_le
 int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len ){
 
   if( ! isOpenSRTPSock(socket) ){
+    debug( "[accept]: invalid SRTP socket\n" );
     return -1;
   }
 
-  while ( new_conns.empty() ); // Do not need lock here since only one consumer
+  while ( new_conns.empty() ){} // Do not need lock here since only one consumer
 
   int fifo = new_conns.front();
   new_conns.pop();
@@ -263,10 +281,12 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t address_len ){
 
   if( ! isOpenSRTPSock(fifo_fd) ){
+    debug( "[connect]: invalid SRTP socket\n" );
     return -1;
   }
 
   if( ! isValidIPAddress((struct sockaddr*) address, address_len) ){
+    debug( "[connect]: invalid IP address\n" );
     return -1;
   }
 
@@ -304,11 +324,17 @@ int _srtp_shutdown( int socket, int how ){
     return -1;
   }
 
+  sleep( 1 ); // for shit to settle
+
   struct Conn_t* conn = fd2conn[socket];
 
   (void) shutdown_conn(conn->sock, 0);
 
+  close( conn->sock );
+
   close(socket);
+
+  unlink( conn->filename );
 
   debug("[shutdown]: joining with worker thread\n");
 
@@ -345,3 +371,4 @@ inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len){
   return addr && (addr_len > 0);
 
 }
+#endif // SRTP_IMPL_CPP

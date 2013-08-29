@@ -50,11 +50,12 @@ void* write_client( void* param ){
 
   write ( sock_fd, TEST_MESSAGE, strlen(TEST_MESSAGE) );
 
+  srtp_shutdown( sock_fd , 0 );
+
   return NULL;
 }
 
-
-TEST( Client2Server, ClientServerCommunication ) {
+TEST( Client2Server, OneClientOneServer ) {
 
   pthread_t id;
 
@@ -94,8 +95,74 @@ TEST( Client2Server, ClientServerCommunication ) {
 
   EXPECT_STREQ( TEST_MESSAGE, buffer );
 
-  pthread_join( id, NULL );
+  pthread_join( id, NULL ); // client_write
 
-  if ( sock_fd > 0 ) close( sock_fd );
+  shutdown( sock_fd , 0); // server
+
+  close( client_fd ); // fifo to read from server
+
 }
 
+TEST( Client2Server, ManyClientOneServer ) {
+
+  pthread_t id[10];
+
+  int sock_fd;
+
+  sock_fd = srtp_socket(AF_INET, SOCK_STREAM, 0);
+
+  //reuse_addr( sock_fd );
+
+  ASSERT_GT( sock_fd, 0 );
+
+  struct sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons ( TEST_PORT );
+  addr.sin_addr.s_addr = inet_addr( loopback_addr() );
+
+  int bind_result = srtp_bind( sock_fd, ( struct sockaddr* ) &addr, sizeof( struct sockaddr_in ) );
+
+  ASSERT_EQ( bind_result, 0 );
+
+  int listen_result = srtp_listen( sock_fd, 0 );
+
+  ASSERT_EQ( listen_result, 0 );
+
+  for(int i = 0; i < 2; i++){
+    pthread_create( &id[i], NULL, write_client, NULL );
+  }
+
+  struct sockaddr_in client_addr;
+  socklen_t socklen = sizeof( struct sockaddr_in );
+
+  int client_fd = srtp_accept( sock_fd, ( struct sockaddr* ) &client_addr, &socklen );
+
+  ASSERT_GT(client_fd, 0 );
+
+  char buffer[ 64 ];
+
+  int n;
+
+  n = read( client_fd, buffer, 64 );
+  write( STDERR_FILENO, buffer, n );
+  EXPECT_STREQ( TEST_MESSAGE, buffer );
+
+  close( client_fd );
+
+  client_fd = srtp_accept( sock_fd, ( struct sockaddr* ) &client_addr, &socklen );
+
+  ASSERT_GT(client_fd, 0 );
+
+  n = read( client_fd, buffer, 64 );
+  write( STDERR_FILENO, buffer, n );
+  EXPECT_STREQ( TEST_MESSAGE, buffer );
+
+  close( client_fd );
+
+  for(int i = 0; i < 2; i++){
+    pthread_join( id[i], NULL );
+  }
+
+  shutdown( sock_fd , 0);
+
+}
