@@ -90,6 +90,7 @@ TEST( Client2Server, OneClientOneServer ) {
   ASSERT_GT(client_fd, 0 );
 
   char buffer[ 64 ];
+  memset(buffer, '\0', 64);
 
   read( client_fd, buffer, 64 );
 
@@ -140,6 +141,7 @@ TEST( Client2Server, ManyClientOneServer ) {
   ASSERT_GT(client_fd, 0 );
 
   char buffer[ 64 ];
+  memset(buffer, '\0', 64);
 
   int n;
 
