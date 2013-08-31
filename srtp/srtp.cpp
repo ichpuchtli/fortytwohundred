@@ -48,3 +48,11 @@ int srtp_shutdown( int socket, int how ){
     return _srtp_shutdown( socket, how );
   #endif
 }
+
+int srtp_close( int socket ){
+  #ifdef USE_STD_TCP
+    return close( socket );
+  #else
+    return _srtp_close( socket );
+  #endif
+}

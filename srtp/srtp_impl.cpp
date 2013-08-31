@@ -1,5 +1,3 @@
-#ifndef SRTP_IMPL_CPP
-#define SRTP_IMPL_CPP
 #include "srtp_impl.h"
 
 #include <string.h>
@@ -31,16 +29,20 @@ inline bool isValidFD(int fd);
 inline bool isOpenSRTPSock(int fifo_fd);
 inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len);
 
+/**
+ * @brief connection structure
+ */
 struct Conn_t {
 
-  pthread_t tid;
+  pthread_t tid; /// @brief the thread id of the worker thread
 
-  int fifo;
-  char filename[32];
+  int fifo; /// @brief the file descriptor of the fifo
+  char filename[32]; /// @brief the filename of the fifo
 
-  int sock;
-  struct sockaddr_in addr;
-  socklen_t addr_len;
+  int sock; /// @brief a UDP socket
+
+  struct sockaddr_in addr; /// @brief a general purpose address structure
+  socklen_t addr_len; /// @brief the address structure size
 
 };
 
@@ -345,6 +347,10 @@ int _srtp_shutdown( int socket, int how ){
   return 0;
 }
 
+int _srtp_close(int socket){
+  return close(socket);
+}
+
 inline bool isValidFD(int fd){
 
   struct stat statbuf;
@@ -371,4 +377,3 @@ inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len){
   return addr && (addr_len > 0);
 
 }
-#endif // SRTP_IMPL_CPP

@@ -1,10 +1,35 @@
+/**
+ * @file srtp_util.h
+ * @brief internal srtp utilites
+ * @author Sam Macpherson
+ * @author Chris Ponticello
+ *
+ * Copyright 2013  Sam Macpherson, Chris Ponticello
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifndef SRTP_UTIL_H
 #define SRTP_UTIL_H
 
 #include <sys/socket.h>
 
-const int CONNECTION_ATTEMPT_TIMEOUT = 5000; // 5000 milliseconds
+/// @brief connect attempt timeout period
+const int CONNECTION_ATTEMPT_TIMEOUT = 5000;
 
+/**
+ * @brief The SHUTDOWN_CONDITIONS enum
+ */
 enum SHUTDOWN_CONDITIONS {
 
   ABNORMAL_TERMINATION,
@@ -12,6 +37,10 @@ enum SHUTDOWN_CONDITIONS {
   FATAL_SERVER_ERROR,
   NORMAL_TERMINATION
 };
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief established a connection with a peer on a UDP socket 
@@ -74,5 +103,9 @@ int recv_srtp_data(int sock, char* buffer, size_t len, struct sockaddr* addr, so
  * in the case of a connection problem
  */
 int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr, socklen_t addr_len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // SRTP_UTIL_H
