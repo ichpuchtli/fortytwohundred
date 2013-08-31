@@ -31,16 +31,10 @@ extern "C" {
 /**
  * @brief Official SRTP commands
  */
-enum srtp_cmd_t {
-
-  SYN, /// @brief  Synchronise
-  SYNACK, /// @brief ??
-  RST, /// @brief ??
-  RSTACK, /// @brief  Reset Connection
-  FIN, /// @brief Finished sending data
-  FINACK  /// @brief ??
-
-};
+#define SYN 0x01 /// @brief  Synchronise
+#define ACK 0x02 /// @brief Acknowledge
+#define FIN 0x04 /// @brief Finished sending data
+#define RST 0x08 /// @brief  Reset Connection
 
 /**
  * @brief SRTP header packet structure
@@ -69,7 +63,7 @@ sendto( sock, bufffer, packet_len );
  */
 struct srtp_header_t {
 
-  uint8_t cmd;  /// @brief srtp_cmd_t
+  uint8_t cmd;  /// @brief srtp command(s) bitmask
   uint8_t len; /// @brief length of header
   uint16_t sequence; /// @brief sequence number
   uint16_t ack; /// @brief ack number
