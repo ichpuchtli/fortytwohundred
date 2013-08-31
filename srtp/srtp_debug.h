@@ -25,10 +25,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief debug printf wrapper
  *
@@ -47,9 +43,5 @@ void debug(const char *format, ...) {
  #endif
 
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // SRTP_DEBUG_H
