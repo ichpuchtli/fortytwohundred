@@ -63,10 +63,10 @@ sendto( sock, bufffer, packet_len );
  */
 struct srtp_header_t {
 
-  uint8_t cmd;  /// @brief srtp command(s) bitmask
+  uint8_t cmd;  /// @brief srtp command bitmask
   uint8_t len; /// @brief length of header
   uint16_t sequence; /// @brief sequence number
-  uint16_t ack; /// @brief ack number
+  uint16_t ack; /// @brief acknowledgement number
   uint16_t checksum; /// @brief checksum
 
 };
