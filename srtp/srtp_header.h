@@ -45,7 +45,7 @@ void pack_srtp_syn( char* buffer, uint32_t sequence, char* data, uint32_t len ){
   srtp_header_t* header = ( srtp_header_t* ) buffer;
 
   header->cmd = SYN;
-  header->sequence= sequence;
+  header->seq = sequence;
   header->len = sizeof(srtp_header_t);
 
   memcpy( buffer + header->len, data, len );
@@ -62,12 +62,16 @@ sendto( sock, bufffer, packet_len );
 
  */
 struct srtp_header_t {
-
-  uint8_t cmd;  /// @brief srtp command bitmask
-  uint8_t len; /// @brief length of header
-  uint16_t sequence; /// @brief sequence number
-  uint16_t ack; /// @brief acknowledgement number
-  uint16_t checksum; /// @brief checksum
+  /// @brief srtp command bitmask
+  uint8_t cmd;
+  /// @brief length of payload
+  uint8_t len;
+  /// @brief sequence number
+  uint16_t seq;
+  /// @brief acknowledgement number
+  uint16_t ack;
+  /// @brief checksum
+  uint16_t checksum;
 
 };
 

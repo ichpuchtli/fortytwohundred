@@ -23,6 +23,7 @@
 #define SRTP_UTIL_H
 
 #include <sys/socket.h>
+#include "srtp_header.h"
 
 /// @brief connect attempt timeout, ms
 const int CONNECT_TIMEOUT = 5000;
@@ -41,6 +42,69 @@ const int ARQN = 16;
 
 /// @brief maximum allowed packet size
 const int PAYLOAD_MAXSIZE = 1024;
+
+/*
+ * The following macros are designed to operate on a character buffer
+ * of at least PKT_HEADERSIZE+PAYLOAD_MAXSIZE bytes, containing an SRTP packet 
+ * at position 0.
+ */
+
+/// @brief SRTP header size
+#define PKT_HEADERSIZE sizeof(struct srtp_header_t)
+
+/// @brief Check if a packet's Command bitmask includes a certain command. 
+#define PKT_HASCMD(buf,cmd) ((srtp_header_t *)buf->cmd && cmd)
+/// @brief Check if a packet's Command bitmask includes SYN
+#define PKT_SYN(buf) PKT_HASCMD(buf, SYN)
+/// @brief Check if a packet's Command bitmask includes ACK
+#define PKT_ACK(buf) PKT_HASCMD(buf, ACK)
+/// @brief Check if a packet's Command bitmask includes FIN
+#define PKT_FIN(buf) PKT_HASCMD(buf, FIN)
+/// @brief Check if a packet's Command bitmask includes RST
+#define PKT_RST(buf) PKT_HASCMD(buf, RST)
+
+/// @brief Get a packet's Command
+#define PKT_CMD(buf) ((srtp_header_t *)buf->cmd)
+/// @brief Get a packet's Length
+#define PKT_LEN(buf) ((srtp_header_t *)buf->len)
+/// @brief Get a packet's Sequence Number
+#define PKT_SEQ(buf) ((srtp_header_t *)buf->seq)
+/// @brief Get a packet's Acknowledgement Number
+#define PKT_ACK(buf) ((srtp_header_t *)buf->ack)
+/// @brief Get a packet's Checksum
+#define PKT_CHECKSUM(buf) ((srtp_header_t *)buf->checksum)
+
+/// @brief Set a packet's Command
+#define PKT_SETCMD(buf, cmd) ((srtp_header_t *)buf->cmd = cmd)
+/// @brief Set a packet's Sequence Number
+#define PKT_SETSEQ(buf, seq) ((srtp_header_t *)buf->seq = seq)
+/// @brief Set a packet's Acknowledgement Number
+#define PKT_SETACK(buf, ack) ((srtp_header_t *)buf->ack = ack)
+/// @brief Set a packet's Payload Length. WARNING - NO ERROR CHECKING
+#define PKT_SETLEN(buf, len) ((srtp_header_t *)buf->len = len)
+/// @brief Generate a packet's Checksum. WARNING - CHECKSUM NOT IMPLEMENTED
+#define PKT_SETCHECKSUM(buf, checksum) ((srtp_header_t *)buf->checksum = checksum)
+
+/// @brief Fetch a packet's Payload Pointer
+#define PKT_PAYLOADPTR(buf) ((char*)buf + PKT_HEADERSIZE)
+/// @brief Get a packet's Payload Length
+#define PKT_PAYLOADLEN(buf) ((srtp_header_t *)buf->len)
+
+/// @brief Zero the entire packet
+#define PKT_ZEROPAYLOAD(buf) memset(buf, '\0', PAYLOAD_MAXSIZE + PKT_HEADERSIZE)
+/// @brief Zero a packet's Payload
+#define PKT_ZEROPAYLOAD(buf) \
+do { \
+  memset(PKT_PAYLOADPTR(buf), '\0', PAYLOAD_MAXSIZE); \
+  PKT_SETLEN(buf, 0); \
+} while (0)
+
+/// @brief Check if a packet is invalid. Validate buffer length and command
+///  bitmask. Checksum validation not implemented
+#define PKT_INVALID(buf) ((srtp_header_t *)buf->len > PAYLOAD_MAXSIZE || \
+                          (srtp_header_t *)buf->cmd > (SYN|ACK|FIN|RST))
+
+/// 
 
 /**
  * @brief The SHUTDOWN_CONDITIONS enum
