@@ -24,8 +24,23 @@
 
 #include <sys/socket.h>
 
-/// @brief connect attempt timeout period
-const int CONNECTION_ATTEMPT_TIMEOUT = 5000;
+/// @brief connect attempt timeout, ms
+const int CONNECT_TIMEOUT = 5000;
+
+/// @brief ack-wait base timeout, ms
+const int RETRY_TIMEOUT_BASE = 50;
+
+/// @brief failed ack-wait time increase, percent
+const int RETRY_TIMEOUT_SCALER = 50;
+
+/// @brief ack-wait max timeout, ms
+const int RETRY_TIMEOUT_MAX = 1000;
+
+/// @brief go-back-n ARQ protocol's "n" (# packets buffered)
+const int ARQN = 16;
+
+/// @brief maximum allowed packet size
+const int PAYLOAD_MAXSIZE = 1024;
 
 /**
  * @brief The SHUTDOWN_CONDITIONS enum
