@@ -88,23 +88,14 @@ int srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len );
 int srtp_connect( int socket, const struct sockaddr* address, socklen_t address_len );
 
 /**
- * @brief shut's down both directions of communication over the SRTP connection
- *Regard
- * @param socket a SRTP socket file descriptor
+ * @brief closes a SRTP socket
+ *
+ * @param socket the SRTP socket to be closed
  * @param how an enumerated constant describing the reason for the shutdown
  *
  * @return 0 on success, -1 otherwise
  */
-int srtp_shutdown( int socket, int how );
-
-/**
- * @brief closes a SRTP socket
- *
- * @param socket the SRTP socket to be closed
- *
- * @return 0 on success, -1 otherwise
- */
-int srtp_close( int socket );
+int srtp_close( int socket, int how );
 
 #ifdef __cplusplus
 }

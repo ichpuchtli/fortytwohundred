@@ -11,7 +11,7 @@ TEST_SOURCES=$(wildcard *_test.cpp)
 TEST_LIBS += ${SRTP_LIB_ARC} ${GTEST_LIB_DIR}/libgtest_main.a ${GTEST_LIB_DIR}/libgtest.a
 TEST_TARGET=runtests
 
-CXXFLAGS += -pedantic -Wall -Wextra -g -std=c++0x
+CXXFLAGS += -pedantic -Wall -Wextra -std=c++0x -g
 
 all : srtp build_gtest build_tests
 

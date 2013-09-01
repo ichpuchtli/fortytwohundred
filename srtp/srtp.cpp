@@ -41,18 +41,11 @@ int srtp_connect( int socket, const struct sockaddr* address, socklen_t address_
   #endif
 }
 
-int srtp_shutdown( int socket, int how ){
+int srtp_close( int socket, int how ){
   #ifdef USE_STD_TCP
-    return shutdown( socket, how );
-  #else
-    return _srtp_shutdown( socket, how );
-  #endif
-}
-
-int srtp_close( int socket ){
-  #ifdef USE_STD_TCP
+    (void) how;
     return close( socket );
   #else
-    return _srtp_close( socket );
+    return _srtp_close( socket, how );
   #endif
 }
