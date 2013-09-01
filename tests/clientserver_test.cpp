@@ -50,7 +50,7 @@ void* write_client( void* param ){
 
   write ( sock_fd, TEST_MESSAGE, strlen(TEST_MESSAGE) );
 
-  srtp_shutdown( sock_fd , 0 );
+  srtp_close( sock_fd , 0 );
 
   return NULL;
 }
@@ -94,13 +94,13 @@ TEST( Client2Server, OneClientOneServer ) {
 
   read( client_fd, buffer, 64 );
 
-  EXPECT_STREQ( TEST_MESSAGE, buffer );
-
   pthread_join( id, NULL ); // client_write
 
-  shutdown( sock_fd , 0); // server
+  srtp_close( sock_fd , 0); // server
 
-  close( client_fd ); // fifo to read from server
+  srtp_close( client_fd, 0 ); // fifo to read from server
+
+  EXPECT_STREQ( TEST_MESSAGE, buffer );
 
 }
 
@@ -149,7 +149,7 @@ TEST( Client2Server, ManyClientOneServer ) {
   write( STDERR_FILENO, buffer, n );
   EXPECT_STREQ( TEST_MESSAGE, buffer );
 
-  close( client_fd );
+  srtp_close( client_fd, 0 );
 
   client_fd = srtp_accept( sock_fd, ( struct sockaddr* ) &client_addr, &socklen );
 
@@ -157,14 +157,14 @@ TEST( Client2Server, ManyClientOneServer ) {
 
   n = read( client_fd, buffer, 64 );
   write( STDERR_FILENO, buffer, n );
-  EXPECT_STREQ( TEST_MESSAGE, buffer );
-
-  close( client_fd );
 
   for(int i = 0; i < 2; i++){
     pthread_join( id[i], NULL );
   }
 
-  shutdown( sock_fd , 0);
+  srtp_close( client_fd, 0 );
 
+  srtp_close( sock_fd , 0);
+
+  EXPECT_STREQ( TEST_MESSAGE, buffer );
 }

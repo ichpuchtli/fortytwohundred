@@ -58,14 +58,9 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 int _srtp_connect( int socket, const struct sockaddr* address, socklen_t address_len );
 
 /**
- * @see srtp_shutdown(int, int)
+ * @see srtp_close(int, int)
  */
-int _srtp_shutdown( int socket, int how );
-
-/**
- * @see srtp_close(int)
- */
-int _srtp_close(int socket);
+int _srtp_close(int socket, int how);
 
 #ifdef __cplusplus
 }

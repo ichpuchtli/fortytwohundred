@@ -41,7 +41,7 @@ TEST(IntegrityTest, InvalidSocket) {
 
   EXPECT_LT( srtp_accept( -1, NULL, NULL) , 0 );
 
-  EXPECT_LT( srtp_shutdown( -1, NULL) , 0 );
+  EXPECT_LT( srtp_close( -1, NULL) , 0 );
 
   int sock = srtp_socket( AF_INET, SOCK_STREAM, 0 );
 
@@ -53,7 +53,7 @@ TEST(IntegrityTest, InvalidSocket) {
 
   EXPECT_LT( srtp_connect(sock, ( struct sockaddr* ) &addr , ( socklen_t ) sizeof(  struct sockaddr_in ) ) , 0 );
 
-  EXPECT_LT( srtp_shutdown(sock, NULL) , 0 );
+  EXPECT_LT( srtp_close(sock, NULL) , 0 );
 
   EXPECT_LT( srtp_accept(sock, NULL, NULL) , 0 );
 

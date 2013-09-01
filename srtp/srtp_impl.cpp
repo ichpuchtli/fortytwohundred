@@ -19,7 +19,7 @@
 #include <set>
 #include <string>
 
-//#define SRTP_DEBUG
+#define SRTP_DEBUG
 
 #include "srtp_debug.h"
 
@@ -34,7 +34,7 @@ inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len);
  */
 struct Conn_t {
 
-  pthread_t tid; /// @brief the thread id of the worker thread
+  pthread_t tid; /// @brief the thread id of the worker thread (unsigned long)
 
   int fifo; /// @brief the file descriptor of the fifo
   char filename[32]; /// @brief the filename of the fifo
@@ -49,7 +49,7 @@ struct Conn_t {
 std::map<std::string, int> hash2fd;
 
 // fifo fd -> connection structure
-std::map<int, struct Conn_t*> fd2conn;
+std::map<int, Conn_t*> fd2conn;
 
 // Accept(pop_front) <- | fifo | fifo | fifo | <- Listen thread (push_back)
 std::queue<int> new_conns;
@@ -65,7 +65,7 @@ void* server_proxy( void* param ){
 
   int fifo_fd = *((int*)&param);
 
-  struct Conn_t* conn = fd2conn[fifo_fd];
+  Conn_t* conn = fd2conn[fifo_fd];
 
   int n;
   char buffer[ 1024 ];
@@ -73,8 +73,7 @@ void* server_proxy( void* param ){
   unsigned char sha1_raw[ 20 ];
   char sha1_char[ 41 ];
 
-
-  debug("[server_proxy]: listing to port %d on socket %d\n", conn->addr.sin_port, conn->sock );
+  debug("[server_proxy]: listing to port %d on socket %d\n", conn->addr.sin_port, fifo_fd);
 
   while ( 1 ) {
 
@@ -100,11 +99,11 @@ void* server_proxy( void* param ){
 
       int fifo = _srtp_socket( 0, 0, 0 );
 
-      struct Conn_t* conn = fd2conn[ fifo ];
+      Conn_t* accept_conn = fd2conn[ fifo ];
 
-      memcpy(&conn->addr, &src_addr, src_addr_len);
+      memcpy(&accept_conn->addr, &src_addr, src_addr_len);
 
-      conn->addr_len = src_addr_len;
+      accept_conn->addr_len = src_addr_len;
 
       write(fifo, buffer, n);
 
@@ -186,7 +185,7 @@ int _srtp_socket( int domain, int type, int protocol ){
     return -1;
   }
 
-  struct Conn_t* conn = (struct Conn_t*) calloc(sizeof(struct Conn_t), sizeof(char));
+  Conn_t* conn = new Conn_t;
 
   conn->fifo = fd;
   memcpy(conn->filename, filename, 32);
@@ -296,7 +295,6 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
   debug("[connect]: establishing connection to xxx...\n");
 
-
   struct Conn_t* conn = fd2conn[fifo_fd];
 
   memcpy(&conn->addr, address, address_len);
@@ -316,39 +314,32 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
 }
 
-int _srtp_shutdown( int socket, int how ){
-
-  ( void ) how;
-
-  debug("[shutdown]: shutting down socket %d due to %d\n", socket, how);
+int _srtp_close(int socket, int how){
 
   if( ! isOpenSRTPSock(socket) ){
     return -1;
   }
 
-  sleep( 1 ); // for shit to settle
+  debug("[close]: closing socket %d\n", socket);
 
-  struct Conn_t* conn = fd2conn[socket];
-
-  (void) shutdown_conn(conn->sock, 0);
-
-  close( conn->sock );
+  usleep(10000); // yielding does not work for some reason, must sleep instead
 
   close(socket);
 
-  unlink( conn->filename );
+  Conn_t* conn = fd2conn[socket];
 
-  debug("[shutdown]: joining with worker thread\n");
+  if(conn->tid){
+    (void) shutdown_conn(conn->sock, 0);
+    close(conn->sock);
+    pthread_cancel(conn->tid);
+    pthread_join(conn->tid, NULL);
+  }
 
-  (void) pthread_join(conn->tid, NULL);
+  unlink(conn->filename);
 
-  debug("[shutdown]: shutting down\n");
+  debug("[close]: socket %d closed\n", socket);
 
   return 0;
-}
-
-int _srtp_close(int socket){
-  return close(socket);
 }
 
 inline bool isValidFD(int fd){
