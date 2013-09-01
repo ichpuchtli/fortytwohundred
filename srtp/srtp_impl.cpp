@@ -68,7 +68,7 @@ void* server_proxy( void* param ){
   struct Conn_t* conn = fd2conn[fifo_fd];
 
   int n;
-  char buffer[ 1024 ];
+  char buffer[ 2048 ];
 
   unsigned char sha1_raw[ 20 ];
   char sha1_char[ 41 ];
@@ -78,7 +78,7 @@ void* server_proxy( void* param ){
 
   while ( 1 ) {
 
-    n = recv_srtp_data(conn->sock, buffer, 1024, ( struct sockaddr* ) &src_addr, &src_addr_len );
+    n = recv_srtp_data(conn->sock, buffer, 2048, ( struct sockaddr* ) &src_addr, &src_addr_len );
 
     if( n < 0 ) break; // Connection Terminated
 
@@ -136,9 +136,9 @@ void* client_proxy(void* param){
   struct Conn_t* conn = fd2conn[fifo_fd];
 
   int n, sent;
-  char buffer[1024];
+  char buffer[2048];
 
-  while( ( n = read(fifo_fd, buffer, 1024)) > 0 ) {
+  while( ( n = read(fifo_fd, buffer, 2048)) > 0 ) {
 
     debug( "[client_proxy]: sending %d bytes\n", n );
 
