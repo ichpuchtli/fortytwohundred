@@ -36,7 +36,7 @@ int copy_file(FILE *file, int out, char *filename) {
     d("Request sent\n");
     long written = 0;
     while (written < size && !feof(file) && !ferror(file)) {
-        int chunksize = fread(buffer, sizeof(char), 512, file);
+        size_t chunksize = fread(buffer, sizeof(char), 512, file);
         if (fwrite(buffer, sizeof(char), chunksize, stream) != chunksize) {
             d("Error writing to network stream\n");
             return RUNTIME_ERROR;

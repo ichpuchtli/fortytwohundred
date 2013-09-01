@@ -99,7 +99,8 @@ int copy_file(int in) {
 }
 
 void *client_thread(void *arg) {
-    int fd = (int) arg;
+    int fd = *((int *)arg);
+    free(arg);
     int state = copy_file(fd);
     d("Child terminating\n");
     srtp_close(fd, state);
@@ -116,10 +117,10 @@ void process_connections(int listen_fd) {
     while (1) {
         struct sockaddr_in from;
         socklen_t fromSize = sizeof(from);
-        pid_t pid = 0;
         d("Waiting for connection\n", listen_fd);
-        int conn = srtp_accept(listen_fd, (struct sockaddr *) &from, &fromSize);
-        if (conn == -1) {
+        int *conn = (int *) malloc(sizeof(int));
+        *conn = srtp_accept(listen_fd, (struct sockaddr *) &from, &fromSize);
+        if (*conn == -1) {
             perror("Accept failed");
             break;
             continue;
@@ -127,7 +128,8 @@ void process_connections(int listen_fd) {
         pthread_t thread;
         if (pthread_create(&thread, &attr, &client_thread, (void *) conn)) {
             perror("Client thread creation failed:");
-            close(conn);
+            close(*conn);
+            free(conn);
             continue;
         }
         pthread_detach(thread);
