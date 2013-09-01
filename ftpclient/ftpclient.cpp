@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include "../srtp/srtp.h"
 #include "debug.h"
 
 #define USAGE "USAGE: %s [-d] server port filename\n"
@@ -94,13 +95,13 @@ int main(int argc, char **argv){
         exit(BAD_PORT);
     }
     d("getaddrinfo() successful\n");
-    int sock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+    int sock = srtp_socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
     if (sock == -1) {
         perror("Error opening socket");
         exit(RUNTIME_ERROR);
     }
     d("Socket opened soccessfully, fd: %d\n", sock);
-    if (connect(sock, addr->ai_addr, addr->ai_addrlen) == -1) {
+    if (srtp_connect(sock, addr->ai_addr, addr->ai_addrlen) == -1) {
         perror("Error connecting to server");
         exit(RUNTIME_ERROR);
     }
@@ -110,6 +111,6 @@ int main(int argc, char **argv){
     copy_file(file, sock, argv[3 + debug]);
     d("Exiting without errors\n");
     fclose(file);
-    close(sock);
+    srtp_close(sock, 0);
     return 0;
 }

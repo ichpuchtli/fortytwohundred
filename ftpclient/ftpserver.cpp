@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <wait.h>
 #include <unistd.h>
+#include <pthread.h>
 #include "../srtp/srtp.h"
 #include "debug.h"
 
@@ -18,6 +19,8 @@
 #define BAD_SIZE 7
 
 extern int debug;
+
+int socket_fd; /* for use in the SIGINT handler */
 
 int copy_file(int in) {
     FILE *stream = fdopen(in, "r");
@@ -95,44 +98,48 @@ int copy_file(int in) {
     return 0;
 }
 
+void *client_thread(void *arg) {
+    int fd = (int) arg;
+    int state = copy_file(fd);
+    d("Child terminating\n");
+    srtp_close(fd, state);
+    return NULL;
+}
+
 void process_connections(int listen_fd) {
+    pthread_attr_t attr;
+    if (pthread_attr_init(&attr) != 0) {
+        fprintf(stderr, "pthread_attr_init() failed. "
+                "This function should never fail.");
+    }
+    socket_fd = listen_fd;
     while (1) {
         struct sockaddr_in from;
         socklen_t fromSize = sizeof(from);
         pid_t pid = 0;
+        d("Waiting for connection\n", listen_fd);
         int conn = srtp_accept(listen_fd, (struct sockaddr *) &from, &fromSize);
         if (conn == -1) {
             perror("Accept failed");
             break;
             continue;
         }
-        if ((pid = fork()) == 0) {
-            int result = copy_file(conn);
-            if (result != 0) {
-                fprintf(stderr, "Error encountered while transferring file\n");
-            }
-            d("Child terminating\n");
+        pthread_t thread;
+        if (pthread_create(&thread, &attr, &client_thread, (void *) conn)) {
+            perror("Client thread creation failed:");
             close(conn);
-            exit(result);
-        } else {
-            d("Accepted connection, child starting with PID %d\n", pid);
-            close(conn);
+            continue;
         }
-        
+        pthread_detach(thread);
+        d("Accepted connection, thread started\n");
     }
 }
 
+/* this is just here to stop SIGPIPE crashing the server */
 void signal_handler(int sig) {
-    int status;
-    if (sig == SIGCHLD) {
-        while (waitpid(-1, &status, WNOHANG) > 0) {
-            if (WIFEXITED(status)) {
-                d("Child reaped, exit status:%d\n", WEXITSTATUS(status));
-            } else {
-                d("Child reaped, child exited abnormally.. signal:%d\n",
-                        WTERMSIG(status));
-            }
-        }
+    if (sig == SIGINT) {
+        srtp_close(socket_fd, 0);
+        exit(0);
     }
 }
 
@@ -144,17 +151,10 @@ int setup_socket(int *sock, int port) {
         return 1;
     }
     d("Socket fd: %d\n", *sock);
-    /* be nice for reuse in case of testing */
-    int opt = 1;
-    if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int)) == -1) {
-        perror("Error setting socket option");
-        return 1;
-    }
-    
     /* bind */
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;                  //IPv4 || IPv6
-    addr.sin_port = htons(port);                //port in network form
+    addr.sin_port = port;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);    //any local IP is good
     if (srtp_bind(*sock, (struct sockaddr*) &addr,
             sizeof(struct sockaddr_in)) == -1) {
@@ -213,7 +213,7 @@ int main(int argc, char **argv){
     signals.sa_handler = signal_handler;
     signals.sa_flags = SA_RESTART;
     sigaction(SIGPIPE, &signals, NULL);
-    sigaction(SIGCHLD, &signals, NULL);
+    sigaction(SIGINT, &signals, NULL);
     
     /* start listening */
     process_connections(socket_fd);
