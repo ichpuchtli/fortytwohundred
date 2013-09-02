@@ -19,11 +19,8 @@
 #include <set>
 #include <string>
 
-#define SRTP_DEBUG
-
-#include "srtp_debug.h"
-
 #include "srtp_util.h"
+#include "srtp_debug.h"
 
 inline bool isValidFD(int fd);
 inline bool isOpenSRTPSock(int fifo_fd);
@@ -322,7 +319,7 @@ int _srtp_close(int socket, int how){
 
   debug("[close]: closing socket %d\n", socket);
 
-  usleep(10000); // yielding does not work for some reason, must sleep instead
+  sleep(1); // yielding does not work for some reason, must sleep instead
 
   close(socket);
 

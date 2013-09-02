@@ -25,23 +25,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#define SRTP_DEBUG
+
 /**
  * @brief debug printf wrapper
  *
  * @param format variable arguments
  * @param ... variable arguments
  */
-void debug(const char *format, ...) {
-
- #ifdef SRTP_DEBUG
-  va_list args;
-  va_start(args, format);
-  vfprintf(stderr, format, args);
-  va_end(args);
- #else
-  (void) format;
- #endif
-
-}
+void debug(const char *format, ...);
 
 #endif // SRTP_DEBUG_H

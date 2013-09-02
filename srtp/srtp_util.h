@@ -23,6 +23,7 @@
 #define SRTP_UTIL_H
 
 #include <sys/socket.h>
+
 #include "srtp_header.h"
 
 /// @brief connect attempt timeout, ms
@@ -53,7 +54,7 @@ const int PAYLOAD_MAXSIZE = 1024;
 #define PKT_HEADERSIZE sizeof(struct srtp_header_t)
 
 /// @brief Check if a packet's Command bitmask includes a certain command. 
-#define PKT_HASCMD(buf,cmd) ((srtp_header_t *)buf->cmd && cmd)
+#define PKT_HASCMD(buf,command) (((srtp_header_t *)buf->cmd) && command)
 /// @brief Check if a packet's Command bitmask includes SYN
 #define PKT_SYN(buf) PKT_HASCMD(buf, SYN)
 /// @brief Check if a packet's Command bitmask includes ACK
@@ -64,36 +65,36 @@ const int PAYLOAD_MAXSIZE = 1024;
 #define PKT_RST(buf) PKT_HASCMD(buf, RST)
 
 /// @brief Get a packet's Command
-#define PKT_CMD(buf) ((srtp_header_t *)buf->cmd)
+#define PKT_GETCMD(buf) (((srtp_header_t *)buf)->cmd)
 /// @brief Get a packet's Length
-#define PKT_LEN(buf) ((srtp_header_t *)buf->len)
+#define PKT_GETLEN(buf) (((srtp_header_t *)buf)->len)
 /// @brief Get a packet's Sequence Number
-#define PKT_SEQ(buf) ((srtp_header_t *)buf->seq)
+#define PKT_GETSEQ(buf) (((srtp_header_t *)buf)->seq)
 /// @brief Get a packet's Acknowledgement Number
-#define PKT_ACK(buf) ((srtp_header_t *)buf->ack)
+#define PKT_GETACK(buf) (((srtp_header_t *)buf)->ack)
 /// @brief Get a packet's Checksum
-#define PKT_CHECKSUM(buf) ((srtp_header_t *)buf->checksum)
+#define PKT_GETCHECKSUM(buf) (((srtp_header_t *)buf)->checksum)
 
 /// @brief Set a packet's Command
-#define PKT_SETCMD(buf, cmd) ((srtp_header_t *)buf->cmd = cmd)
+#define PKT_SETCMD(buf, command) (((srtp_header_t *)buf)->cmd = command)
 /// @brief Set a packet's Sequence Number
-#define PKT_SETSEQ(buf, seq) ((srtp_header_t *)buf->seq = seq)
+#define PKT_SETSEQ(buf, seqnum) (((srtp_header_t *)buf)->seq = seqnum)
 /// @brief Set a packet's Acknowledgement Number
-#define PKT_SETACK(buf, ack) ((srtp_header_t *)buf->ack = ack)
+#define PKT_SETACK(buf, acknum) (((srtp_header_t *)buf)->ack = acknum)
 /// @brief Set a packet's Payload Length. WARNING - NO ERROR CHECKING
-#define PKT_SETLEN(buf, len) ((srtp_header_t *)buf->len = len)
+#define PKT_SETLEN(buf, length) (((srtp_header_t *)buf)->len = length)
 /// @brief Generate a packet's Checksum. WARNING - CHECKSUM NOT IMPLEMENTED
-#define PKT_SETCHECKSUM(buf, checksum) ((srtp_header_t *)buf->checksum = checksum)
+#define PKT_SETCHECKSUM(buf, chksum) (((srtp_header_t *)buf)->checksum = chksum)
 
 /// @brief Fetch a packet's Payload Pointer
 #define PKT_PAYLOADPTR(buf) ((char*)buf + PKT_HEADERSIZE)
 /// @brief Get a packet's Payload Length
-#define PKT_PAYLOADLEN(buf) ((srtp_header_t *)buf->len)
+#define PKT_PAYLOADLEN(buf) (((srtp_header_t *)buf)->len)
 
 /// @brief Zero the entire packet
 #define PKT_ZEROPAYLOAD(buf) memset(buf, '\0', PAYLOAD_MAXSIZE + PKT_HEADERSIZE)
 /// @brief Zero a packet's Payload
-#define PKT_ZEROPAYLOAD(buf) \
+#define PKT_ZERO(buf) \
 do { \
   memset(PKT_PAYLOADPTR(buf), '\0', PAYLOAD_MAXSIZE); \
   PKT_SETLEN(buf, 0); \
@@ -101,8 +102,8 @@ do { \
 
 /// @brief Check if a packet is invalid. Validate buffer length and command
 ///  bitmask. Checksum validation not implemented
-#define PKT_INVALID(buf) ((srtp_header_t *)buf->len > PAYLOAD_MAXSIZE || \
-                          (srtp_header_t *)buf->cmd > (SYN|ACK|FIN|RST))
+#define PKT_INVALID(buf) (((srtp_header_t *)buf)->len > PAYLOAD_MAXSIZE || \
+                          ((srtp_header_t *)buf)->cmd > (SYN|ACK|FIN|RST))
 
 /// 
 
@@ -182,6 +183,8 @@ int recv_srtp_data(int sock, char* buffer, size_t len, struct sockaddr* addr, so
  * in the case of a connection problem
  */
 int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr, socklen_t addr_len);
+
+
 
 #ifdef __cplusplus
 }
