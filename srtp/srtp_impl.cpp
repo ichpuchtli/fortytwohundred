@@ -293,6 +293,12 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
   int srtp_sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4
 
+  (void) connect(srtp_sock, address, address_len);
+
+  int flags = fcntl(srtp_sock, F_GETFL, 0);
+  flags |= O_NONBLOCK;
+  fcntl(srtp_sock, F_SETFL, flags);
+
   debug("[connect]: establishing connection to xxx...\n");
 
   struct Conn_t* conn = fd2conn[fifo_fd];
@@ -300,7 +306,11 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
   memcpy(&conn->addr, address, address_len);
   conn->sock = srtp_sock;
 
-  (void) establish_conn( srtp_sock , address, address_len);
+  if(establish_conn( srtp_sock , address, address_len)){
+    debug("[connect]: failed.\n");
+    close(srtp_sock);
+    return -1;
+  }
 
   debug("[connect]: Done.\n");
 
