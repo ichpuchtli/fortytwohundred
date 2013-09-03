@@ -24,7 +24,7 @@ wait $CLIENT_PID
 
 echo "client stopped: $?"
 
-kill -9 $SERVER_PID
+kill -2 $SERVER_PID
 
 wait $SERVER_PID
 
@@ -33,5 +33,7 @@ echo "server stopped: $?"
 diff $SOURCE file.txt > /dev/null
 
 DIFF_RES=$?
+
+rm -f file.txt
 
 exit $DIFF_RES
