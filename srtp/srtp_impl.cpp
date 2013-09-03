@@ -334,6 +334,10 @@ int _srtp_close(int socket, int how){
 
   unlink(conn->filename);
 
+  fd2conn->erase(socket);
+  
+  delete conn;
+  
   debug("[close]: socket %d closed\n", socket);
 
   return 0;
