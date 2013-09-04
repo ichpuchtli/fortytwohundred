@@ -24,6 +24,10 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <map>
+#include <queue>
+#include <set>
+#include <string>
 
 #include "srtp_header.h"
 
@@ -45,10 +49,9 @@ const int ARQN = 16;
 /// @brief maximum allowed packet size
 const int PAYLOAD_MAXSIZE = 1024;
 
-/*
+/* ----------------------------------------------------------------------------
  * The following macros are designed to operate on a character buffer
- * of at least PKT_HEADERSIZE+PAYLOAD_MAXSIZE bytes, containing an SRTP packet 
- * at position 0.
+ * of at least PKT_MAXSIZE bytes, containing an SRTP packet at position 0.
  */
 
 /// @brief SRTP header size
@@ -75,8 +78,8 @@ const int PAYLOAD_MAXSIZE = 1024;
 #define PKT_GETSEQ(buf) (((srtp_header_t *)buf)->seq)
 /// @brief Get a packet's Acknowledgement Number
 #define PKT_GETACK(buf) (((srtp_header_t *)buf)->ack)
-/// @brief Get a packet's Checksum
-#define PKT_GETCHECKSUM(buf) (((srtp_header_t *)buf)->checksum)
+/// @brief Get a packet's Command Info Number
+#define PKT_GETCMDINFO(buf) (((srtp_header_t *)buf)->cmdinfo)
 
 /// @brief Set a packet's Command
 #define PKT_SETCMD(buf, command) (((srtp_header_t *)buf)->cmd = command)
@@ -86,8 +89,8 @@ const int PAYLOAD_MAXSIZE = 1024;
 #define PKT_SETACK(buf, acknum) (((srtp_header_t *)buf)->ack = acknum)
 /// @brief Set a packet's Payload Length. WARNING - NO ERROR CHECKING
 #define PKT_SETLEN(buf, length) (((srtp_header_t *)buf)->len = length)
-/// @brief Generate a packet's Checksum. WARNING - CHECKSUM NOT IMPLEMENTED
-#define PKT_SETCHECKSUM(buf, chksum) (((srtp_header_t *)buf)->checksum = chksum)
+/// @brief Set a packet's Command Info Number.
+#define PKT_SETCMDINFO(buf, info) (((srtp_header_t *)buf)->cmdinfo = info)
 
 /// @brief Fetch a packet's Payload Pointer
 #define PKT_PAYLOADPTR(buf) ((char*)buf + PKT_HEADERSIZE)
@@ -109,17 +112,14 @@ do { \
 /// @brief Check if a packet length is invalid
 #define PKT_INVALID_LEN(len) (len > PAYLOAD_MAXSIZE)
 /// @brief Check if a packet command is invalid
-#define PKT_INVALID_CMD(cmd) (cmd > (SYN|ACK|FIN|RST))
+#define PKT_INVALID_CMD(cmd) (cmd > (SYN|ACK|FIN|RST|RDY))
 /// @brief Check if a packet is invalid. Validate buffer length and command
-///  bitmask. Checksum validation not implemented
+///  bitmask
 #define PKT_INVALID(buf) ( PKT_INVALID_LEN(PKT_GETLEN(buf)) || \
                            PKT_INVALID_CMD(PKT_GETCMD(buf)) )
 
-/// 
-
-/**
- * @brief The SHUTDOWN_CONDITIONS enum
- */
+// Shutdown condition 
+//TODO need to expose to application, or just use ints with documented meanings
 enum SHUTDOWN_CONDITIONS {
 
   ABNORMAL_TERMINATION,
@@ -203,21 +203,20 @@ int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr
  * @brief Convert a packet command bitmask to a human readable string.
  *
  * @param cmd the SRTP command bitmask
- * @param s the string buffer to print into, at least 32 characters
- *
- * @return a pointer to the string
+ * @param s the string buffer to print into. Recommend 32 characters
  */
 void srtp_cmdstr(int cmd, char* s);
 
 /**
- * @brief Convert a packet header to a human readable string.
+ * @brief Convert a packet header and src/dest to a human readable string.
  *
  * @param cmd the SRTP command bitmask
- * @param s the string buffer to print into, at least 32 characters
- *
- * @return a pointer to the string
+ * @param remote the remote socket address
+ * @param local the local socket address
+ * @param direction SEND or RECV
+ * @param s the string buffer to print into. Recommend 128 characters
  */
-void srtp_pktstr(char* buf, char* s);
+void pkt_str(char* buf, struct sockaddr_in remote, struct sockaddr_in local, int direction, char* s);
 
 /**
  * @brief Validate a packet; print error messages if it's invalid
@@ -247,12 +246,12 @@ int pkt_set_payload(char* buf, char* payload, uint16_t len);
  * @param len size of the payload, in bytes
  * @param seq the SRTP sequence number
  * @param ack the SRTP ack number
- * @param checksum the packet checksum (not yet implemented)
+ * @param cmdinfo the command info number
  * @param payload a buffer containing a payload for the packet
  *
  * @return len for a successful write, -1 if packet could not be written
  */
- int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, uint8_t checksum, char* payload);
+ int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, uint8_t cmdinfo, char* payload);
 
 
 #ifdef __cplusplus
@@ -278,13 +277,20 @@ struct Conn_t {
 
 };
 
+/* ----------------------------------------------------------------------------
+ * GLOBALS
+ */
+
 /// @brief hash(addr) -> fifo fd
-std::map<std::string, int> hash2fd;
+extern std::map<std::string, int> hash2fd;
 
 /// @brief fifo fd -> connection structure
-std::map<int, Conn_t*> fd2conn;
+extern std::map<int, Conn_t*> fd2conn;
 
 /// @brief this queue contains fifo fd's for new incoming connections
-std::queue<int> new_conns;
+extern std::queue<int> new_conns;
+
+/// @brief this switch enables/disables lightweight debug messages
+extern bool srtp_packet_debug;
 
 #endif // SRTP_UTIL_H

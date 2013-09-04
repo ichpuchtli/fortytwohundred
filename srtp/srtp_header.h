@@ -38,6 +38,12 @@ extern "C" {
 #define RDY 0x10 /// @brief  Ready for data
 
 /**
+ * @brief Packet directions
+ */
+#define SEND 0
+#define RECV 1
+
+/**
  * @brief SRTP header packet structure
 
 @code{.c}

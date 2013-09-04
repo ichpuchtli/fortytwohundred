@@ -21,6 +21,13 @@ ssize_t srtp_write(int sock, char* buffer, size_t length);
 ssize_t srtp_sendto(int sock, char* message, size_t length, int flags, struct sockaddr* dest_addr, socklen_t dest_len);
 ssize_t srtp_recvfrom(int sock, char* buffer, size_t length, int flags, struct sockaddr* addr, socklen_t* addr_len);
 
+std::map<std::string, int> hash2fd;
+
+std::map<int, Conn_t*> fd2conn;
+
+std::queue<int> new_conns;
+
+bool srtp_packet_debug = 0;
 
 int establish_conn(int sock, const struct sockaddr* addr, socklen_t addr_len){
   
@@ -121,7 +128,7 @@ int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr
 SENDTO_SEND_SYN:
 
     PKT_SETCMD(buff, SYN);
-    PKT_SETSEQ(buff, ); //TODO how will we count sequence nums??
+    PKT_SETSEQ(buff, seq); //TODO how will we count sequence nums??
     PKT_SETLEN(buff, len);
     
     sent = srtp_write(sock, data, len); // assume write wont block
@@ -166,24 +173,42 @@ SENDTO_SEND_SYN:
 // ----------------------------------------------------------------------------
 
 void srtp_cmdstr(int cmd, char* s) {
-  sprintf(s, "|%s|%s|%s|%s|",
-    (cmd&RST?"RST":"."),
-    (cmd&FIN?"FIN":"."),
-    (cmd&ACK?"ACK":"."),
-    (cmd&SYN?"SYN":"."));
+  s[0] = '\0';
+  if (cmd&RST) {
+    if (s[0]!='\0') strcat(s, "+");
+    strcat(s, "RST");
+  }
+  if (cmd&SYN) {
+    if (s[0]!='\0') strcat(s, "+");
+    strcat(s, "SYN");
+  }
+  if (cmd&FIN) {
+    if (s[0]!='\0') strcat(s, "+");
+    strcat(s, "FIN");
+  }
+  if (cmd&RDY) {
+    if (s[0]!='\0') strcat(s, "+");
+    strcat(s, "RDY");
+  }
+  if (cmd&ACK) {
+    if (s[0]!='\0') strcat(s, "+");
+    strcat(s, "ACK");
+  }
 }
 
-void srtp_pktstr(char* buf, char* s) {
-    
+void pkt_str(char* buf, struct sockaddr_in remote, struct sockaddr_in local, int direction, char* s) {
+  if (srtp_packet_debug) {
+    //hh:mm:ss xxx.xxx.xxx:xxxxx [<|>] SYN+ACK [<|>] local:xxxxx | seq=n ack=n [len=n] [code=n]
+  }
 }
 
 int pkt_invalid(char* buf) {
-  if (PKT_INVALID_LEN(buf)) {
-    debug("[pkt_invalid] PKT_INVALID_LEN(%u)\n", len);
+  if (PKT_INVALID_LEN(PKT_GETLEN(buf))) {
+    debug("[pkt_invalid] PKT_INVALID_LEN(%u)\n", PKT_GETLEN(buf));
     return 1;
   }
-  if (PKT_INVALID_CMD(buf)) {
-    debug("[pkt_invalid] PKT_INVALID_CMD(%u)\n", len);
+  if (PKT_INVALID_CMD(PKT_GETCMD(buf))) {
+    debug("[pkt_invalid] PKT_INVALID_CMD(%u)\n", PKT_GETCMD(buf));
     return 1;
   }
   return 0;
@@ -200,7 +225,7 @@ int pkt_set_payload(char* buf, char* payload, uint16_t len) {
   return len;
 }
 
-int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, uint8_t checksum, char* payload) {
+int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, uint8_t cmdinfo, char* payload) {
   if (PKT_INVALID_CMD(cmd)) {
     debug("[pkt_set_payload] PKT_INVALID_LEN(%u)\n", len);
     return -1;
@@ -208,7 +233,7 @@ int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, u
   PKT_SETCMD(buf, cmd);
   PKT_SETSEQ(buf, seq);
   PKT_SETACK(buf, ack);
-  PKT_SETCHECKSUM(buf, checksum);
+  PKT_SETCMDINFO(buf, cmdinfo);
   
   return pkt_set_payload(buf, payload, len);
 }

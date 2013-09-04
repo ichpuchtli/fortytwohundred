@@ -97,6 +97,13 @@ int srtp_connect( int socket, const struct sockaddr* address, socklen_t address_
  */
 int srtp_close( int socket, int how );
 
+/**
+ * @brief enables/disables lightweight debug messages
+ *
+ * @param enable switch debug messages on/off
+ */
+void srtp_debug(bool enable);
+
 #ifdef __cplusplus
 }
 #endif

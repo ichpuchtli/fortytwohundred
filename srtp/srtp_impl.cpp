@@ -319,13 +319,18 @@ int _srtp_close(int socket, int how){
 
   unlink(conn->filename);
 
-  fd2conn->erase(socket);
+  fd2conn.erase(socket);
   
   delete conn;
   
   debug("[close]: socket %d closed\n", socket);
 
   return 0;
+}
+
+void _srtp_debug(bool enable){
+  
+  srtp_packet_debug = enable;
 }
 
 inline bool isValidFD(int fd){

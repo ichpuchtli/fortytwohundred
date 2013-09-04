@@ -49,3 +49,7 @@ int srtp_close( int socket, int how ){
     return _srtp_close( socket, how );
   #endif
 }
+
+void srtp_debug( bool enable ){
+    _srtp_debug( enable );
+}

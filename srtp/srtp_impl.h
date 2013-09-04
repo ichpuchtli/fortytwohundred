@@ -62,6 +62,11 @@ int _srtp_connect( int socket, const struct sockaddr* address, socklen_t address
  */
 int _srtp_close(int socket, int how);
 
+/**
+ * @see srtp_debug(bool)
+ */
+void _srtp_debug(bool enable);
+
 #ifdef __cplusplus
 }
 #endif
