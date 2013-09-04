@@ -23,6 +23,7 @@
 #define SRTP_UTIL_H
 
 #include <sys/socket.h>
+#include <netinet/in.h>
 
 #include "srtp_header.h"
 
@@ -52,9 +53,11 @@ const int PAYLOAD_MAXSIZE = 1024;
 
 /// @brief SRTP header size
 #define PKT_HEADERSIZE sizeof(struct srtp_header_t)
+/// @brief SRTP max packet size
+#define PKT_MAXSIZE (PKT_HEADERSIZE+PAYLOAD_MAXSIZE)
 
 /// @brief Check if a packet's Command bitmask includes a certain command. 
-#define PKT_HASCMD(buf,command) (((srtp_header_t *)buf->cmd) && command)
+#define PKT_HASCMD(buf,command) (((srtp_header_t *)buf)->cmd && command)
 /// @brief Check if a packet's Command bitmask includes SYN
 #define PKT_SYN(buf) PKT_HASCMD(buf, SYN)
 /// @brief Check if a packet's Command bitmask includes ACK
@@ -92,7 +95,7 @@ const int PAYLOAD_MAXSIZE = 1024;
 #define PKT_PAYLOADLEN(buf) (((srtp_header_t *)buf)->len)
 
 /// @brief Zero the entire packet
-#define PKT_ZEROPAYLOAD(buf) memset(buf, '\0', PAYLOAD_MAXSIZE + PKT_HEADERSIZE)
+#define PKT_ZEROPAYLOAD(buf) memset(buf, '\0', PKT_MAXSIZE)
 /// @brief Zero a packet's Payload
 #define PKT_ZERO(buf) \
 do { \
@@ -100,10 +103,17 @@ do { \
   PKT_SETLEN(buf, 0); \
 } while (0)
 
+/// @brief Copy one packet over another
+#define PKT_COPYTO(dest, src) memcpy(dest, src, (size_t)PKT_MAXSIZE)
+
+/// @brief Check if a packet length is invalid
+#define PKT_INVALID_LEN(len) (len > PAYLOAD_MAXSIZE)
+/// @brief Check if a packet command is invalid
+#define PKT_INVALID_CMD(cmd) (cmd > (SYN|ACK|FIN|RST))
 /// @brief Check if a packet is invalid. Validate buffer length and command
 ///  bitmask. Checksum validation not implemented
-#define PKT_INVALID(buf) (((srtp_header_t *)buf)->len > PAYLOAD_MAXSIZE || \
-                          ((srtp_header_t *)buf)->cmd > (SYN|ACK|FIN|RST))
+#define PKT_INVALID(buf) ( PKT_INVALID_LEN(PKT_GETLEN(buf)) || \
+                           PKT_INVALID_CMD(PKT_GETCMD(buf)) )
 
 /// 
 
@@ -184,6 +194,65 @@ int recv_srtp_data(int sock, char* buffer, size_t len, struct sockaddr* addr, so
  */
 int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr, socklen_t addr_len);
 
+/* ----------------------------------------------------------------------------
+ * The functions beloware are utilities for the above methods. 
+ * They are exposed in the header for unit tests.
+ */
+
+/**
+ * @brief Convert a packet command bitmask to a human readable string.
+ *
+ * @param cmd the SRTP command bitmask
+ * @param s the string buffer to print into, at least 32 characters
+ *
+ * @return a pointer to the string
+ */
+void srtp_cmdstr(int cmd, char* s);
+
+/**
+ * @brief Convert a packet header to a human readable string.
+ *
+ * @param cmd the SRTP command bitmask
+ * @param s the string buffer to print into, at least 32 characters
+ *
+ * @return a pointer to the string
+ */
+void srtp_pktstr(char* buf, char* s);
+
+/**
+ * @brief Validate a packet; print error messages if it's invalid
+ *
+ * @param buf a buffer containing an SRTP packet
+ *
+ * @return 0 for a valid packet, >0 otherwise
+ */
+int pkt_invalid(char* buf);
+
+/**
+ * @brief Write a payload into a buffer containing an srtp packet.
+ *
+ * @param buf a buffer containing an SRTP packet
+ * @param payload a buffer containing a payload for the packet
+ * @param len size of the payload, in bytes
+ *
+ * @return len for a successful write, -1 if payload could not be copied
+ */
+int pkt_set_payload(char* buf, char* payload, uint16_t len);
+
+/**
+ * @brief Construct an srtp packet from a new header and payload
+ *
+ * @param buf a buffer containing an SRTP packet
+ * @param cmd the SRTP command bitmask
+ * @param len size of the payload, in bytes
+ * @param seq the SRTP sequence number
+ * @param ack the SRTP ack number
+ * @param checksum the packet checksum (not yet implemented)
+ * @param payload a buffer containing a payload for the packet
+ *
+ * @return len for a successful write, -1 if packet could not be written
+ */
+ int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, uint8_t checksum, char* payload);
 
 
 #ifdef __cplusplus
