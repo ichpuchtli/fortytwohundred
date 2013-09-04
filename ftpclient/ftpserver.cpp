@@ -199,7 +199,7 @@ int main(int argc, char **argv){
     if ((sscanf(argv[1 + debug], "%u%c", &port, &crap)) != 1 || port < 1 
             || port > 65535) {
         fprintf(stderr, "The port '%s' is invalid, please provide a "
-                "port in the range 1 to 65535\n", argv[2 + debug]);
+                "port in the range 1 to 65535\n", argv[1 + debug]);
         return BAD_PORT;
     }
     d("Port valid: %d\n", port);

@@ -90,8 +90,9 @@ int main(int argc, char **argv){
     
     /* check address, set up socket, connect */
     struct addrinfo *addr = NULL;
-    if (getaddrinfo(argv[1 + debug], argv[2 + debug], NULL, &addr) != 0) {
-        perror("Error getting address info");
+    int ai = -1;
+    if ((ai = getaddrinfo(argv[1 + debug], argv[2 + debug], NULL, &addr)) != 0) {
+        fprintf(stderr, "Error getting address info: %s\n", gai_strerror(ai));
         exit(BAD_PORT);
     }
     d("getaddrinfo() successful\n");
