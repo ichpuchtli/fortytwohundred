@@ -190,4 +190,32 @@ int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr
 }
 #endif
 
+/**
+ * @brief connection structure
+ */
+struct Conn_t {
+
+  pthread_t tid; /// @brief the thread id of the worker thread (unsigned long)
+
+  int fifo; /// @brief the file descriptor of the fifo
+  char filename[32]; /// @brief the filename of the fifo
+
+  int sock; /// @brief a UDP socket
+
+  struct sockaddr_in addr; /// @brief a general purpose address structure
+  socklen_t addr_len; /// @brief the address structure size
+  
+  unsigned int sequence; /// @brief the current sequence number
+
+};
+
+/// @brief hash(addr) -> fifo fd
+std::map<std::string, int> hash2fd;
+
+/// @brief fifo fd -> connection structure
+std::map<int, Conn_t*> fd2conn;
+
+/// @brief this queue contains fifo fd's for new incoming connections
+std::queue<int> new_conns;
+
 #endif // SRTP_UTIL_H

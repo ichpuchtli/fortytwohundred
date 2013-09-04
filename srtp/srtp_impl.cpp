@@ -26,31 +26,6 @@ inline bool isValidFD(int fd);
 inline bool isOpenSRTPSock(int fifo_fd);
 inline bool isValidIPAddress(struct sockaddr* addr, socklen_t addr_len);
 
-/**
- * @brief connection structure
- */
-struct Conn_t {
-
-  pthread_t tid; /// @brief the thread id of the worker thread (unsigned long)
-
-  int fifo; /// @brief the file descriptor of the fifo
-  char filename[32]; /// @brief the filename of the fifo
-
-  int sock; /// @brief a UDP socket
-
-  struct sockaddr_in addr; /// @brief a general purpose address structure
-  socklen_t addr_len; /// @brief the address structure size
-
-};
-
-std::map<std::string, int> hash2fd;
-
-// fifo fd -> connection structure
-std::map<int, Conn_t*> fd2conn;
-
-// Accept(pop_front) <- | fifo | fifo | fifo | <- Listen thread (push_back)
-std::queue<int> new_conns;
-
 const int FIFO_PERMISSIONS = 0666;
 
 const int UDP_PKT_SIZE = 65535 - 20 - 8; // 2^16 - IP Header - UDP Header
