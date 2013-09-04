@@ -298,6 +298,8 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
 int _srtp_close(int socket, int how){
 
+  ( void ) how;
+
   if( ! isOpenSRTPSock(socket) ){
     return -1;
   }
@@ -319,10 +321,10 @@ int _srtp_close(int socket, int how){
 
   unlink(conn->filename);
 
-  fd2conn->erase(socket);
-  
+  fd2conn.erase(socket);
+
   delete conn;
-  
+
   debug("[close]: socket %d closed\n", socket);
 
   return 0;
