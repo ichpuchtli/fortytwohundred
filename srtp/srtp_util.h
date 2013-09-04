@@ -287,7 +287,7 @@ struct Conn_t {
   
   unsigned int sequence; /// @brief the current sequence number, i.e. the one we're expecting
 
-  std::list<Mesg_t> inbox; /// @brief a list of in order messages
+  std::list<Mesg_t*> inbox; /// @brief a list of in order messages
 
 };
 

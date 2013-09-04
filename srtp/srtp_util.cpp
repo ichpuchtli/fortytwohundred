@@ -129,21 +129,27 @@ int handle_data_pkt( srtp_header_t* head, Conn_t* conn ){
 
     memcpy(mesg_buf, buffer + sizeof(srtp_header_t), head->len);
 
-    std::list<Mesg_t>::iterator pos = conn->inbox.end();
+    std::list<Mesg_t*>::iterator pos = conn->inbox.end();
 
-    for (std::list<Mesg_t>::iterator it = conn->inbox.begin();
+    for (std::list<Mesg_t*>::iterator it = conn->inbox.begin();
 
       it != conn->inbox.end(); it++ ){
 
-      if ( it->seq > head->seq ){
+      if ( ( *it )->seq > head->seq ){
         pos = it;
         break;
       }
 
     }
 
+    Mesg_t* mesg = new Mesg_t;
+
+    mesg->mesg = mesg_buf;
+    mesg->len = head->len;
+    mesg->seq = head->seq;
+
     // Insert mesg before pos unless pos is end() then insert will act as push back
-    conn->inbox.insert(pos, { mesg_buf, head->len, head->seq } );
+    conn->inbox.insert(pos, mesg);
 
   }
 
