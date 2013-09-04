@@ -262,7 +262,11 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
   int srtp_sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4
 
-  (void) connect(srtp_sock, address, address_len);
+  int cret = connect(srtp_sock, address, address_len);
+  if (cret == -1) {
+    debug("[connect]: connect failed\n");
+    return cret;
+  }
 
   int flags = fcntl(srtp_sock, F_GETFL, 0);
   flags |= O_NONBLOCK;

@@ -48,8 +48,6 @@ int srtp_connect( int socket, const struct sockaddr* address, socklen_t address_
   #ifdef USE_STD_TCP
     return connect( socket, address, address_len );
   #else
-    ((struct sockaddr_in *) address)->sin_port = 
-            ntohs(((struct sockaddr_in *) address)->sin_port);
     return _srtp_connect( socket, address, address_len );
   #endif
 }
