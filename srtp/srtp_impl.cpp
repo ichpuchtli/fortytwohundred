@@ -183,7 +183,11 @@ int _srtp_listen( int fifo_fd, int backlog ){
     return -1;
   }
 
-  bind( conn->sock, ( struct sockaddr* ) &conn->addr, conn->addr_len );
+  int bret = bind( conn->sock, ( struct sockaddr* ) &conn->addr, conn->addr_len );
+  if (bret == -1) {
+    debug("[listen]: binding failed\n");
+    return bret;
+  }
 
   pthread_create(&conn->tid, NULL, server_proxy, (void*)( long ) fifo_fd);
 
@@ -210,7 +214,6 @@ int _srtp_bind( int socket, const struct sockaddr* address, socklen_t address_le
 
   // Store address for later i.e when we actually have a socket
   memcpy( &conn->addr, address, address_len );
-
   conn->addr_len = address_len;
 
   return 0;
@@ -235,7 +238,7 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 
     memcpy( address, &conn->addr, conn->addr_len );
 
-    *address_len = conn->addr_len;
+    conn->addr_len = *address_len;
 
   }
 
@@ -259,7 +262,11 @@ int _srtp_connect( int fifo_fd, const struct sockaddr* address, socklen_t addres
 
   int srtp_sock = socket(AF_INET, SOCK_DGRAM, 0); // IPv4
 
-  (void) connect(srtp_sock, address, address_len);
+  int cret = connect(srtp_sock, address, address_len);
+  if (cret == -1) {
+    debug("[connect]: connect failed\n");
+    return cret;
+  }
 
   int flags = fcntl(srtp_sock, F_GETFL, 0);
   flags |= O_NONBLOCK;
@@ -312,7 +319,7 @@ int _srtp_close(int socket, int how){
     pthread_cancel(conn->tid);
     pthread_join(conn->tid, NULL);
   }
-
+  
   unlink(conn->filename);
 
   fd2conn.erase(socket);
