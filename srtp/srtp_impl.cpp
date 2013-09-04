@@ -238,7 +238,7 @@ int _srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len )
 
     memcpy( address, &conn->addr, conn->addr_len );
 
-    *address_len = conn->addr_len;
+    conn->addr_len = *address_len;
 
   }
 
