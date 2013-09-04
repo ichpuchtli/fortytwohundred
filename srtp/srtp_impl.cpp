@@ -189,7 +189,11 @@ int _srtp_listen( int fifo_fd, int backlog ){
     return -1;
   }
 
-  bind( conn->sock, ( struct sockaddr* ) &conn->addr, conn->addr_len );
+  int bret = bind( conn->sock, ( struct sockaddr* ) &conn->addr, conn->addr_len );
+  if (bret == -1) {
+    debug("[listen]: binding failed\n");
+    return bret;
+  }
 
   pthread_create(&conn->tid, NULL, server_proxy, (void*)( long ) fifo_fd);
 
@@ -216,7 +220,6 @@ int _srtp_bind( int socket, const struct sockaddr* address, socklen_t address_le
 
   // Store address for later i.e when we actually have a socket
   memcpy( &conn->addr, address, address_len );
-
   conn->addr_len = address_len;
 
   return 0;
@@ -318,7 +321,7 @@ int _srtp_close(int socket, int how){
     pthread_cancel(conn->tid);
     pthread_join(conn->tid, NULL);
   }
-
+  
   unlink(conn->filename);
 
   fd2conn.erase(socket);

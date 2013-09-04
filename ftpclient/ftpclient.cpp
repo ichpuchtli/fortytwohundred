@@ -47,6 +47,25 @@ int copy_file(FILE *file, int out, char *filename) {
     return 0;
 }
 
+void process_address(struct addrinfo **addr, char *hostname, char *port) {
+    struct addrinfo hints;
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_protocol = 0;
+    hints.ai_canonname = NULL;
+    hints.ai_addr = NULL;
+    hints.ai_next = NULL;
+    
+    int ai = -1;
+    if ((ai = getaddrinfo(hostname, port, &hints, addr)) != 0) {
+        fprintf(stderr, "Error getting address info: %s\n", gai_strerror(ai));
+        exit(BAD_PORT);
+    }
+}
+
 int main(int argc, char **argv){
     unsigned int port = 0;
     FILE *file = NULL;
@@ -57,6 +76,7 @@ int main(int argc, char **argv){
             return BAD_ARGS;
         }
         debug = 1;
+        srtp_debug(1);
     } else if (argc == 4) {
         /* -d supplied */
         if (strncmp("-d", argv[1], 2) == 0) {
@@ -90,20 +110,17 @@ int main(int argc, char **argv){
     
     /* check address, set up socket, connect */
     struct addrinfo *addr = NULL;
-    int ai = -1;
-    if ((ai = getaddrinfo(argv[1 + debug], argv[2 + debug], NULL, &addr)) != 0) {
-        fprintf(stderr, "Error getting address info: %s\n", gai_strerror(ai));
-        exit(BAD_PORT);
-    }
+    process_address(&addr, argv[1 + debug], argv[2 + debug]);
     d("getaddrinfo() successful\n");
     int sock = srtp_socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
     if (sock == -1) {
         perror("Error opening socket");
         exit(RUNTIME_ERROR);
     }
-    d("Socket opened soccessfully, fd: %d\n", sock);
+    d("Socket opened successfully, fd: %d\n", sock);
     if (srtp_connect(sock, addr->ai_addr, addr->ai_addrlen) == -1) {
         perror("Error connecting to server");
+        srtp_close(sock, RUNTIME_ERROR);
         exit(RUNTIME_ERROR);
     }
     freeaddrinfo(addr);

@@ -1,6 +1,13 @@
 #include "srtp.h"
 #include "srtp_impl.h"
 
+
+#ifdef USE_STD_TCP
+  #include <sys/socket.h>
+  #include <unistd.h>
+#endif
+
+
 int srtp_socket( int domain, int type, int protocol ){
   #ifdef USE_STD_TCP
     return socket( domain, type, protocol );
@@ -21,6 +28,8 @@ int srtp_bind( int socket, const struct sockaddr* address, socklen_t address_len
   #ifdef USE_STD_TCP
     return bind( socket, address, address_len );
   #else
+    ((struct sockaddr_in *) address)->sin_port = 
+            ntohs(((struct sockaddr_in *) address)->sin_port);
     return _srtp_bind( socket, address, address_len );
   #endif
 }
@@ -29,6 +38,8 @@ int srtp_accept( int socket, struct sockaddr* address, socklen_t* address_len ){
   #ifdef USE_STD_TCP
     return accept( socket, address, address_len );
   #else
+  //((struct sockaddr_in *) address)->sin_port = 
+   //         ntohs(((struct sockaddr_in *) address)->sin_port);
     return _srtp_accept( socket, address, address_len );
   #endif
 }
@@ -37,6 +48,8 @@ int srtp_connect( int socket, const struct sockaddr* address, socklen_t address_
   #ifdef USE_STD_TCP
     return connect( socket, address, address_len );
   #else
+    ((struct sockaddr_in *) address)->sin_port = 
+            ntohs(((struct sockaddr_in *) address)->sin_port);
     return _srtp_connect( socket, address, address_len );
   #endif
 }

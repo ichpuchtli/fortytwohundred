@@ -155,8 +155,8 @@ int setup_socket(int *sock, int port) {
     d("Socket fd: %d\n", *sock);
     /* bind */
     struct sockaddr_in addr;
-    addr.sin_family = AF_INET;                  //IPv4 || IPv6
-    addr.sin_port = port;
+    addr.sin_family = AF_INET;                  //IPv4
+    addr.sin_port = port;//htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);    //any local IP is good
     if (srtp_bind(*sock, (struct sockaddr*) &addr,
             sizeof(struct sockaddr_in)) == -1) {
@@ -182,7 +182,7 @@ int main(int argc, char **argv){
             fprintf(stderr, USAGE, argv[0]);
             return BAD_ARGS;
         }
-        debug = 1;
+        srtp_debug(debug = 1);
     } else if (argc == 2) {
         /* -d supplied */
         if (strncmp("-d", argv[1], 2) == 0) {
