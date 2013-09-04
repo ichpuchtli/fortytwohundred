@@ -35,6 +35,7 @@ extern "C" {
 #define ACK 0x02 /// @brief Acknowledge
 #define FIN 0x04 /// @brief Finished sending data
 #define RST 0x08 /// @brief  Reset Connection
+#define RDY 0x10 /// @brief  Ready for data
 
 /**
  * @brief SRTP header packet structure
@@ -62,17 +63,16 @@ sendto( sock, bufffer, packet_len );
 
  */
 struct srtp_header_t {
-  /// @brief srtp command bitmask
-  uint8_t cmd;
   /// @brief length of payload
-  uint8_t len;
+  uint16_t len;
   /// @brief sequence number
   uint16_t seq;
   /// @brief acknowledgement number
   uint16_t ack;
-  /// @brief checksum
-  uint16_t checksum;
-
+  /// @brief command info number
+  uint8_t cmdinfo;
+  /// @brief srtp command bitmask
+  uint8_t cmd;
 };
 
 #ifdef __cplusplus
