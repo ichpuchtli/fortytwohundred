@@ -13,12 +13,6 @@
 #include <openssl/sha.h>
 #include <pthread.h>
 
-// C++ Headers
-#include <map>
-#include <queue>
-#include <set>
-#include <string>
-
 #include "srtp_util.h"
 #include "srtp_debug.h"
 

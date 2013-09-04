@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <openssl/sha.h>
 #include <sys/socket.h>
 
 #include <sys/time.h> // for struct timeval & gettimeofday
@@ -19,7 +20,11 @@
 ssize_t srtp_read(int sock, char* buffer, size_t length);
 ssize_t srtp_write(int sock, char* buffer, size_t length);
 ssize_t srtp_sendto(int sock, char* message, size_t length, int flags, struct sockaddr* dest_addr, socklen_t dest_len);
-ssize_t srtp_recvfrom(int sock, char* buffer, size_t length, int flags, struct sockaddr* addr, socklen_t* addr_len);
+
+int handle_data_pkt( srtp_header_t* head, Conn_t* conn );
+int handle_cmd_pkt( srtp_header_t* head, Conn_t* conn );
+
+int fdByAddrHash( unsigned char* data, size_t len );
 
 std::map<std::string, int> hash2fd;
 
@@ -103,13 +108,115 @@ int shutdown_conn(int sock, int how){
   return 0;
 }
 
+
+int handle_data_pkt( srtp_header_t* head, Conn_t* conn ){
+
+  int fifo = conn->fifo;
+  char* buffer = ( char* ) head + sizeof( srtp_header_t );
+
+  if(conn->sequence == head->seq){
+
+    // if we block here we may miss UDP packets, the alternative however is not better
+    write(fifo, buffer + sizeof( srtp_header_t ), head->len );
+
+    conn->sequence++;
+
+    // check if more messages can be sent in order now
+
+  } else {
+
+    char* mesg_buf = new char[ head->len ];
+
+    memcpy(mesg_buf, buffer + sizeof(srtp_header_t), head->len);
+
+    std::list<Mesg_t>::iterator pos = conn->inbox.end();
+
+    for (std::list<Mesg_t>::iterator it = conn->inbox.begin();
+
+      it != conn->inbox.end(); it++ ){
+
+      if ( it->seq > head->seq ){
+        pos = it;
+        break;
+      }
+
+    }
+
+    // Insert mesg before pos unless pos is end() then insert will act as push back
+    conn->inbox.insert(pos, { mesg_buf, head->len, head->seq } );
+
+  }
+
+  return 0;
+}
+
+int handle_cmd_pkt( srtp_header_t* head, Conn_t* conn ){
+
+  // Connection Request
+  if ( ( head->cmd & SYN ) && ( head->seq == 0 ) ) {
+    //sendto ack
+  }
+
+  // Teardown Request
+  if ( ( head->cmd & FIN ) ) {
+    //sendto fin ack
+  }
+
+  return 0;
+}
+
 int recv_srtp_data(int sock, char* buffer, size_t len, struct sockaddr* addr, socklen_t* addr_len){
 
   int n;
 
-  n = recvfrom( sock, buffer, len, 0, addr, addr_len );
+  srtp_header_t* header = ( srtp_header_t* ) buffer;
 
-  return n;
+  while ( 1 ) {
+
+    n = recvfrom( sock, buffer, len, 0, addr, addr_len );
+
+    // Would block, i.e idle
+    if ( n < 0 ) {
+
+      // Perfect time to check all connection inboxes to see if data can be passed
+      // down fifo's in order
+      continue;
+    }
+
+    int fifo = fdByAddrHash( ( unsigned char* ) addr, ( size_t ) addr_len );
+
+    Conn_t* conn = fd2conn[ fifo ];
+
+    if ( header->len > 0 ) { // Data Packet
+
+      ( void ) handle_data_pkt( header, conn );
+
+      // Send syn ack
+
+      srtp_header_t ack_pkt;
+
+      ack_pkt.seq = header->seq;
+      ack_pkt.cmd = ACK;
+      ack_pkt.len = 0;
+
+      // send_ack_to(sock, seq, addr, addr_len);
+
+      ( void ) srtp_sendto( sock, ( char* ) &ack_pkt, PKT_HEADERSIZE, 0, addr, *addr_len );
+
+      continue;
+
+    }
+
+    // Command Packet
+
+    ( void ) handle_cmd_pkt( header, conn );
+
+    // send_ack_to(...)
+
+  }
+
+  return 0;
+
 }
 
 int send_srtp_data(int sock, char* data, size_t len, const struct sockaddr* addr, socklen_t addr_len ) {
@@ -274,14 +381,23 @@ ssize_t srtp_sendto(int sock, char* message, size_t length, int flags, struct so
     
 }
 
-ssize_t srtp_recvfrom(int sock, char* buffer, size_t length, int flags, struct sockaddr* addr, socklen_t* addr_len) {
-  
-  ssize_t recvd = 0;
-  
-  do{
-    recvd += recvfrom(sock, &buffer[recvd], length - recvd, flags, addr, addr_len);
-  } while(recvd > 0 && (size_t) recvd < length);
-    
-  return recvd;
-    
+int fdByAddrHash( unsigned char* data, size_t len ){
+
+  unsigned char raw[ 20 ];
+  char str[ 40 ];
+
+  ( void ) SHA1( ( unsigned char* )data, len, raw );
+
+  for(int i = 0; i < 20; i++){
+    sprintf(&str[2*i], "%x", raw[i]);
+  }
+
+  std::string shasum( ( char* ) str, ( size_t ) 40 );
+
+  if ( hash2fd.find( shasum ) == hash2fd.end() ){
+    return -1;
+  }
+
+  return hash2fd[ shasum ];
+
 }
