@@ -17,14 +17,19 @@
 
 #include "srtp_debug.h"
 
+// we need this now that we are creating sockets in fdbyaddrhash()
+extern int _srtp_socket( int domain, int type, int protocol );
+
 ssize_t srtp_read(int sock, char* buffer, size_t length);
 ssize_t srtp_write(int sock, char* buffer, size_t length);
 ssize_t srtp_sendto(int sock, char* message, size_t length, int flags, struct sockaddr* dest_addr, socklen_t dest_len);
 
 int handle_data_pkt( srtp_header_t* head, Conn_t* conn );
-int handle_cmd_pkt( srtp_header_t* head, Conn_t* conn );
+int handle_cmd_pkt(int sock, srtp_header_t* head, Conn_t* conn );
 
 int fdByAddrHash( unsigned char* data, size_t len );
+
+void send_ack_to( int sock, unsigned int seq, struct sockaddr* addr, socklen_t addr_len );
 
 std::map<std::string, int> hash2fd;
 
@@ -35,70 +40,70 @@ std::queue<int> new_conns;
 bool srtp_packet_debug = 0;
 
 int establish_conn(int sock, const struct sockaddr* addr, socklen_t addr_len){
-  
+
   // Don't need these since we connect'ed the UDP socket earlier in srtp_impl
   (void) addr;
   (void) addr_len;
-  
+
   char buff[PKT_HEADERSIZE];
-  
+
   struct timeval t1, t2;
   unsigned long dt = 0;
   unsigned long total_msec = 0;
-  
+
   while(1) {
-    
+
 ESTABLISH_SEND_SYN:
 
     PKT_SETCMD(buff, SYN);
     PKT_SETSEQ(buff, 0);
     PKT_SETLEN(buff, 0);
-    
+
     (void) srtp_write(sock, buff, PKT_HEADERSIZE); // assume write wont block
-    
+
     gettimeofday(&t2, NULL); // Stamp t2 with microseconds
-    
+
     while(1) { 
-      
+
       if(srtp_read(sock, buff, PKT_HEADERSIZE) == PKT_HEADERSIZE){
         // Got back a packet, lets see if it is the ack we expected
         if(PKT_ACK(buff) && (PKT_GETACK(buff) == 0)){
           break;
         }
       }
-      
+
       gettimeofday(&t1, NULL);
-      
+
       dt = (t2.tv_sec - t1.tv_sec) * 1000000U + (t2.tv_usec - t1.tv_usec); 
-      
+
       total_msec += dt/1000;
-      
+
       // Total timeout
       if( total_msec > (unsigned long)CONNECT_TIMEOUT) {
         return -1;
       }
-      
+
       // Re-send timeout
       if(dt > (RETRY_TIMEOUT_BASE * 1000)){
         goto ESTABLISH_SEND_SYN;
-      }      
-      
+      }
+
       // for cpu sake
       usleep(10000);
-      
+
     }
-    
+
   }
-    
+
   PKT_SETCMD(buff, ACK);
   PKT_SETSEQ(buff, 0); //does this need to be 0 or 1: 0 initially, see http://goo.gl/B8Yvea
   PKT_SETACK(buff, 0);
   PKT_SETLEN(buff, 0);
 
   (void) srtp_write(sock, buff, PKT_HEADERSIZE); // assume write wont block
-      
+
   return 0;
-  
+
 }
 
 int shutdown_conn(int sock, int how){
@@ -156,11 +161,11 @@ int handle_data_pkt( srtp_header_t* head, Conn_t* conn ){
   return 0;
 }
 
-int handle_cmd_pkt( srtp_header_t* head, Conn_t* conn ){
+int handle_cmd_pkt(int sock, srtp_header_t* head, Conn_t* conn ){
 
   // Connection Request
   if ( ( head->cmd & SYN ) && ( head->seq == 0 ) ) {
-    //sendto ack
+    // send syn ack
   }
 
   // Teardown Request
@@ -189,6 +194,7 @@ int recv_srtp_data(int sock, char* buffer, size_t len, struct sockaddr* addr, so
       continue;
     }
 
+    // this will create a fifo & conn_t if it doesn't exist
     int fifo = fdByAddrHash( ( unsigned char* ) addr, ( size_t ) addr_len );
 
     Conn_t* conn = fd2conn[ fifo ];
@@ -197,27 +203,13 @@ int recv_srtp_data(int sock, char* buffer, size_t len, struct sockaddr* addr, so
 
       ( void ) handle_data_pkt( header, conn );
 
-      // Send syn ack
+      send_ack_to(sock, header->seq, addr, *addr_len); // Send syn ack
 
-      srtp_header_t ack_pkt;
+    } else { // Command Packet
 
-      ack_pkt.seq = header->seq;
-      ack_pkt.cmd = ACK;
-      ack_pkt.len = 0;
-
-      // send_ack_to(sock, seq, addr, addr_len);
-
-      ( void ) srtp_sendto( sock, ( char* ) &ack_pkt, PKT_HEADERSIZE, 0, addr, *addr_len );
-
-      continue;
+      ( void ) handle_cmd_pkt(sock, header, conn );
 
     }
-
-    // Command Packet
-
-    ( void ) handle_cmd_pkt( header, conn );
-
-    // send_ack_to(...)
 
   }
 
@@ -347,44 +339,44 @@ int pkt_pack(char* buf, uint8_t cmd, uint16_t len, uint16_t seq, uint16_t ack, u
   PKT_SETSEQ(buf, seq);
   PKT_SETACK(buf, ack);
   PKT_SETCMDINFO(buf, cmdinfo);
-  
+
   return pkt_set_payload(buf, payload, len);
 }
 
 
 ssize_t srtp_write(int sock, char* buffer, size_t length){
-  
+
   ssize_t sent = 0;
-  
+
   do{
     sent += write(sock, &buffer[sent], length - sent);
   } while(sent > 0 && (size_t) sent < length);
-    
+
   return sent;
 }
 
 ssize_t srtp_read(int sock, char* buffer, size_t length){
-  
+
   ssize_t recvd = 0;
-  
+
   do{
     recvd += read(sock, &buffer[recvd], length - recvd);
   } while(recvd > 0 && (size_t) recvd < length);
-    
+
   return recvd;
-  
+
 }
 
 ssize_t srtp_sendto(int sock, char* message, size_t length, int flags, struct sockaddr* dest_addr, socklen_t dest_len) {
-  
+
   ssize_t sent = 0;
-  
+
   do{
     sent += sendto(sock, &message[sent], length - sent, flags, dest_addr, dest_len);
   } while(sent > 0 && (size_t) sent < length);
-    
+
   return sent;
-    
+
 }
 
 int fdByAddrHash( unsigned char* data, size_t len ){
@@ -401,9 +393,35 @@ int fdByAddrHash( unsigned char* data, size_t len ){
   std::string shasum( ( char* ) str, ( size_t ) 40 );
 
   if ( hash2fd.find( shasum ) == hash2fd.end() ){
-    return -1;
+
+    //TODO _srtp_socket dependency, we may need to move everything into
+    //the one file or compile one object the impl and util sources
+
+    //int fifo = _srtp_socket( 0, 0, 0 );
+
+    //Conn_t* new_conn = fd2conn[ fifo ];
+
+    //memcpy(&new_conn->addr, data, len);
+
+    //new_conn->addr_len = len;
+
+    //hash2fd.insert( {shasum, fifo} );
+
   }
 
   return hash2fd[ shasum ];
 
 }
+
+void send_ack_to( int sock, unsigned int seq, struct sockaddr* addr, socklen_t addr_len ){
+
+  srtp_header_t head;
+
+  head.cmd = ACK;
+  head.len = 0;
+  head.seq = seq;
+
+  ( void ) srtp_sendto( sock, ( char* ) &head, sizeof( srtp_header_t ), 0, addr, addr_len );
+
+}
+
