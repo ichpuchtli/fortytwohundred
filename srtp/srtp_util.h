@@ -24,10 +24,12 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+
 #include <map>
 #include <queue>
 #include <set>
 #include <string>
+#include <list>
 
 #include "srtp_header.h"
 
@@ -258,6 +260,16 @@ int pkt_set_payload(char* buf, char* payload, uint16_t len);
 }
 #endif
 
+struct Mesg_t { 
+
+  char* mesg;
+
+  size_t len;
+
+  unsigned int seq;
+
+};
+
 /**
  * @brief connection structure
  */
@@ -273,7 +285,9 @@ struct Conn_t {
   struct sockaddr_in addr; /// @brief a general purpose address structure
   socklen_t addr_len; /// @brief the address structure size
   
-  unsigned int sequence; /// @brief the current sequence number
+  unsigned int sequence; /// @brief the current sequence number, i.e. the one we're expecting
+
+  std::list<Mesg_t*> inbox; /// @brief a list of in order messages
 
 };
 
