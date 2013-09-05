@@ -12,8 +12,10 @@
 #define USAGE "USAGE: %s [-d] server port filename\n"
 #define BAD_ARGS 1
 #define BAD_PORT 2
-#define BAD_FILE 3
-#define RUNTIME_ERROR 4
+#define RUNTIME_ERROR 3
+#define BAD_REQUEST 4
+#define FILE_EXISTS 5
+#define BAD_FILE 6
 #define TIMEOUT 8
 
 extern int debug, errno;
@@ -57,10 +59,18 @@ int copy_file(FILE *file, int sock, char *filename, struct sockaddr *addr,
     }
     if (buffer[0] == 'A') {
         d("Request accepted\n");
+    } else if (buffer[0] == FILE_EXISTS) {
+        printf("%s already exists on the server, server rejected\n", filename);
+        exit(FILE_EXISTS);
     }
     long written = 0;
+    uint8_t sequence = 1;
     while (written < size && !feof(file) && !ferror(file)) {
-        size_t chunksize = fread(buffer, sizeof(char), PAYLOAD_SIZE, file);
+        size_t chunksize = fread(buffer + HEADER_SIZE, sizeof(char),
+                PAYLOAD_SIZE, file);
+        buffer[0] = 'D';
+        buffer[1] = sequence++;
+        *(buffer + 2) = htons(chunksize);
         print_packet((struct sockaddr_in *)addr, (struct sockaddr_in *) &mine, 
                 buffer, SEND);
         if (sendto(sock, buffer, PACKET_SIZE, 0, (struct sockaddr *) addr,

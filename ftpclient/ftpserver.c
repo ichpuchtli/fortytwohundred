@@ -72,7 +72,13 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     /* check file doesn't already exist */
     if (access(filename, F_OK) != -1) {
         d("Given file '%s' already exists\n", buffer + 4);
-        
+        buffer[0] = FILE_EXISTS;
+        if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
+                originLength) != PACKET_SIZE) {
+            perror("Error denying request");
+            *separator = '\0';
+            exit(RUNTIME_ERROR);
+        }
         return FILE_EXISTS;
     }
     char dummy = '\0';
