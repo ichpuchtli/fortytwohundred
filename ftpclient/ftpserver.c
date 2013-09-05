@@ -35,9 +35,14 @@ int socket_fd; /* for use in the SIGINT handler */
 int copy_file(char *buffer, struct sockaddr_in origin, 
         size_t originLength) {
     int socket = 0;
+    struct sockaddr addr;
+    socklen_t mySize = sizeof(struct sockaddr); 
     if (setup_socket(&socket, 0) != 0) {
         return RUNTIME_ERROR;
     }
+    getsockname(socket, &addr, &mySize);
+    d("Child process opening emphemeral port %d\n", 
+            ntohs(((struct sockaddr_in *)&addr)->sin_port));
     long filesize = -1, read = 0;
     /* read the request type */
     if (strncmp(buffer, "WRQ|", 4) != 0) {
@@ -71,12 +76,8 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     /* check file doesn't already exist */
     if (access(filename, F_OK) != -1) {
         d("Given file '%s' already exists\n", buffer + 4);
+        
         return FILE_EXISTS;
-    }
-    FILE *file = fopen(filename, "w");
-    if (file == NULL) {
-        perror("Error opening file for writing");
-        return CANNOT_CREATE;
     }
     char dummy = '\0';
     if (sscanf(separator + 1, "%ld%c", &filesize, &dummy) != 1 
@@ -84,7 +85,21 @@ int copy_file(char *buffer, struct sockaddr_in origin,
         d("Given size invalid\n");
         return BAD_REQUEST;
     }
-
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        perror("Error opening file for writing");
+        return CANNOT_CREATE;
+    }
+    // send an ACK from our new ephemeral port
+    buffer[0] = 'A', buffer[1] = 'C', buffer[2] = 'K', *separator = '|';
+    if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
+            originLength) != PACKET_SIZE) {
+        perror("Error acking request\n");
+        *separator = '\0';
+        unlink(filename);
+        exit(RUNTIME_ERROR);
+    }
+    
     struct sockaddr_in from;
     socklen_t fromSize = sizeof(struct sockaddr_in);
     
