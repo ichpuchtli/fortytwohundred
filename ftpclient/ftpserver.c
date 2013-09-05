@@ -199,7 +199,7 @@ void signal_handler(int sig) {
                 }
             }
         }
-        if (errno != ECHILD) {
+        if (errno != ECHILD && pid < 0) {
             perror("Error attempting to reap child");
         }
     }
