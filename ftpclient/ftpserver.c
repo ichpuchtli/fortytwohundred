@@ -18,6 +18,7 @@
 #define FILE_EXISTS 5
 #define CANNOT_CREATE 6
 #define BAD_SIZE 7
+#define TIMEOUT 8
 
 extern int debug, errno;
 
@@ -36,10 +37,9 @@ int copy_file(char *buffer, struct sockaddr_in origin,
         return RUNTIME_ERROR;
     }
     getsockname(socket, &addr, &mySize);
-    d("Child process opening emphemeral port %d\n", 
+    d("Child process opening ephemeral port %d\n", 
             ntohs(((struct sockaddr_in *)&addr)->sin_port));
     long filesize = -1, read = 0;
-    print_packet((struct sockaddr_in *)&addr, &origin, buffer, RECV);
     /* read the request type */
     if (strncmp(buffer, "WRQ|", 4) != 0) {
         d("Request was not of valid format or "
@@ -88,17 +88,31 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     }
     // send an ACK from our new ephemeral port
     buffer[0] = 'A', buffer[1] = 'C', buffer[2] = 'K', *separator = '|';
-    if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
-            originLength) != PACKET_SIZE) {
-        perror("Error acking request\n");
-        *separator = '\0';
-        unlink(filename);
-        exit(RUNTIME_ERROR);
-    }
-    
     struct sockaddr_in from;
     socklen_t fromSize = sizeof(struct sockaddr_in);
-    
+    int size_read = -1;
+    time_t startTime = time(NULL);
+    do {
+        print_packet((struct sockaddr_in *)&addr, &from, buffer, SEND);
+        if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
+                originLength) != PACKET_SIZE) {
+            perror("Error acking request\n");
+            *separator = '\0';
+            unlink(filename);
+            exit(RUNTIME_ERROR);
+        }
+        sleep(1);
+        size_read = recvfrom(socket, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                (struct sockaddr *) &from, &fromSize);
+    } while (size_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)
+            && time(NULL) - startTime < 6);
+    if (size_read < 0) {
+        d("Client timed out\n");
+        *separator = '\0';
+        unlink(filename);
+        exit(TIMEOUT);
+    }
+   
     /* read enough bytes */
     while (read < filesize) {
         int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
@@ -137,6 +151,8 @@ void process_connections(int listen_fd) {
     socket_fd = listen_fd;
     char *buffer = malloc(sizeof(char) * PACKET_SIZE);
     struct sockaddr_in from;
+    struct sockaddr mine;
+    getsockname(listen_fd, &mine, NULL);
     socklen_t fromSize = sizeof(from);
     children = malloc(sizeof(struct List));
     if (children == NULL) {
@@ -150,6 +166,7 @@ void process_connections(int listen_fd) {
         d("Waiting for connection\n", listen_fd);
         int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 0,
                 (struct sockaddr *) &from, &fromSize);
+        print_packet((struct sockaddr_in *)&mine, &from, buffer, RECV);
         if (n == 0) {
             d("Empty message received\n");
             continue;
