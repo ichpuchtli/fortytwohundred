@@ -93,7 +93,7 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     int size_read = -1;
     time_t startTime = time(NULL);
     do {
-        print_packet((struct sockaddr_in *)&addr, &from, buffer, SEND);
+        print_packet((struct sockaddr_in *)&addr, &origin, buffer, SEND);
         if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
                 originLength) != PACKET_SIZE) {
             perror("Error acking request\n");

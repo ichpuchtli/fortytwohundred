@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "srtp_common.h"
 
@@ -13,6 +14,7 @@
 #define BAD_PORT 2
 #define BAD_FILE 3
 #define RUNTIME_ERROR 4
+#define TIMEOUT 8
 
 extern int debug, errno;
 
@@ -21,8 +23,9 @@ void signal_handler(int signal) {
     exit(RUNTIME_ERROR);
 }
 
-int copy_file(FILE *file, int out, char *filename) {
-    FILE *stream = fdopen(out, "wb");
+int copy_file(FILE *file, int sock, char *filename, struct sockaddr *addr,
+        socklen_t *addrLen) {
+    FILE *stream = fdopen(sock, "wb");
     if (stream == NULL) {
         perror("fdopen(socket_fd)");
         return RUNTIME_ERROR;
@@ -31,9 +34,21 @@ int copy_file(FILE *file, int out, char *filename) {
     struct stat s;
     stat(filename, &s);
     long size = s.st_size;
-    fprintf(stream, "WRQ|%s|%ld", filename, size);
-    fflush(stream);
-    d("Request sent\n");
+    d("Sending request\n");
+    time_t startTime = time(NULL);
+    int size_read = 0;
+    do {
+        fprintf(stream, "WRQ|%s|%ld", filename, size);
+        fflush(stream);
+        sleep(1);
+        size_read = recvfrom(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                addr, addrLen);
+    } while (size_read < 0 && errno == EWOULDBLOCK && time(NULL) - startTime < 6);
+    if (size_read < 0) {
+        fprintf(stderr, "Connection to server timed out.\n");
+        exit(TIMEOUT);
+    }
+    
     long written = 0;
     while (written < size && !feof(file) && !ferror(file)) {
         size_t chunksize = fread(buffer, sizeof(char), 512, file);
@@ -125,7 +140,7 @@ int main(int argc, char **argv){
     freeaddrinfo(addr);
     d("Connected successfully\n");
     /* request to write (reads not required in the assignment) */
-    copy_file(file, sock, argv[3 + debug]);
+    copy_file(file, sock, argv[3 + debug], addr->ai_addr, &(addr->ai_addrlen));
     d("Exiting without errors\n");
     fclose(file);
     close(sock);
