@@ -75,9 +75,13 @@ int copy_file(int in) {
         if (actual < chunksize) {
             if (feof(stream)) {
                 d("Unexpected end of file reached\n");
+                fclose(file);
+                unlink(filename);
                 return BAD_SIZE;
             } else if (ferror(stream)) {
                 d("Error encountered while reading file\n");
+                fclose(file);
+                unlink(filename);
                 return RUNTIME_ERROR;
             }
         } else {

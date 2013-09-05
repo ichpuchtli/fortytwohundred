@@ -7,7 +7,7 @@
 #include "fcntl.h"
 #include <sys/socket.h>
 
-#include "../srtp/srtp_util.h"
+#include "../srtp/srtp_impl.h"
 #include "../srtp/srtp_debug.h"
 
 #define TEST_MESSAGE "Hello World!\r\n"
