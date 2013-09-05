@@ -17,23 +17,30 @@
  */
 #define CMD_NONE ((uint8_t)0)
 #define CMD_ACK ((uint8_t)1)
+#define CMD_BADREQ ((uint8_t)2)
+#define CMD_EXISTS ((uint8_t)3)
+#define CMD_DATA ((uint8_t)4)
+#define CMD_WRQ ((uint8_t)5)
+#define CMD_FIN ((uint8_t)6)
 //...
-#define MAX_CMD_VALUE ((uint8_t)1)
+#define MAX_CMD_VALUE ((uint8_t)6)
 
 const char* command_strings[(size_t)(MAX_CMD_VALUE+1)]={
-    "", "ACK"
+    "", "ACK", "BRQ", "FEX", "DAT", "WRQ", "FIN"
 };
 
 #define PACKET_SIZE 512
-#define HEADER_SIZE 2
+#define HEADER_SIZE 4
 #define PAYLOAD_SIZE (PACKET_SIZE - HEADER_SIZE)
+
+#define WINDOW_SIZE 50
 
 enum PKTDIR {
   SEND, RECV
 };
 
-#define GETLEN(buf) ntohs(*((uint16_t*)(&buf[2])))
-#define SETLEN(buf, len) (*((uint16_t*)(&buf[2])) = htons(len))
+#define GETLEN(buf) ~ntohs(*((uint16_t*)(&buf[2])))
+#define SETLEN(buf, len) ~(*((uint16_t*)(&buf[2])) = htons(len))
 
 #define d2(...) fprintf(stderr,__VA_ARGS__)
 
@@ -62,7 +69,8 @@ char* command2str(uint8_t command) {
     } else return (char*)command_strings[command];
 }
 
-void print_packet(struct sockaddr_in* addr_local, struct sockaddr_in* addr_remote, char* pktbuffer, enum PKTDIR dir) {
+void print_packet(struct sockaddr_in* addr_local,
+        struct sockaddr_in* addr_remote, char* pktbuffer, enum PKTDIR dir) {
     char timestr[32]={'\0'};
     char str_remote[32];
     char str_local[32];
@@ -107,5 +115,89 @@ int setup_socket(int *sock, int port) {
     return 0;
 }
 
+struct EndPoint {
+    union {
+        struct sockaddr *base;
+        struct sockaddr_in *in;
+    } addr;
+    socklen_t len;
+};
+
+int send_packet(int sock, struct EndPoint *target, char *packet, 
+        struct sockaddr *local) {
+    print_packet((struct sockaddr_in *) local,
+            (struct sockaddr_in *) target->addr.in, packet, SEND);
+    size_t packetSize = HEADER_SIZE + ntohs(*(packet + 2));
+    return sendto(sock, packet, packetSize, 0, target->addr.base,
+            target->len) != packetSize;
+}
+
+int send_all(int sock, struct EndPoint *target, struct List *packets, 
+        struct sockaddr *local) {
+    if (packets->head == NULL) {
+        return 0;
+    }
+    for (struct ListNode *n = packets->head; n != NULL; n = n->next) {
+        if (send_packet(sock, target, (char *) n->data, local)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+char *create_packet(uint8_t command, uint8_t sequence, short payloadSize,
+        char *payload) {
+    char *buffer = malloc(sizeof(char) * (payloadSize + HEADER_SIZE));
+    buffer[0] = command;
+    buffer[1] = sequence;
+    SETLEN(buffer, payloadSize);
+    if (payload != NULL) {
+        memcpy(buffer + HEADER_SIZE, payload, payloadSize);
+    }
+    return buffer;
+} 
+
+size_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
+        struct sockaddr *wanted, socklen_t *wantedSize) {
+    size_t read = 0;
+    char *temp = malloc(sizeof(char) * packetSize);
+    if (temp == NULL) {
+        return -1;
+    }
+    struct sockaddr from;
+    socklen_t fromSize;
+    read = recvfrom(sock, temp, packetSize, flags, &from, &fromSize);
+    // is this from the endpoint we care about?
+    if (1 || read > 0 && !memcmp(from.sa_data, wanted->sa_data, 14)) {
+        if (read == -1 && errno == EWOULDBLOCK) {
+            fprintf(stderr, ".");
+        }
+        memcpy(buffer, temp, packetSize);
+        *(buffer+2) = GETLEN(buffer);
+        free(temp);
+        return read;
+    }
+    d("Discarding foreign packet\n");
+    //no? well, ignore it
+    free(temp);
+    errno = EAGAIN;
+    return -1;
+}
+
+size_t read_until_timeout(int socket, char *buffer, size_t packetSize, int flags,
+        struct EndPoint *end) {
+    time_t startTime = time(NULL);
+    int read;
+    while (time(NULL) - startTime < 6) {
+        read = read_only_from(socket, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                end->addr.base, &end->len);
+        if (read > 0) {
+            return read;
+        }
+        usleep(10000);
+    }
+    d("Connection timed out\n");
+    return -1;
+}
 
 #endif

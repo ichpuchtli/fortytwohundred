@@ -22,15 +22,13 @@
 
 extern int debug, errno;
 
+/* both for use in the SIGINT handler */
 struct List *children = NULL;
+int socket_fd;
 
-int setup_socket(int *, int); /* socket, portnum (0 = ANY) */
-
-int socket_fd; /* for use in the SIGINT handler */
-
-int copy_file(char *buffer, struct sockaddr_in origin, 
-        size_t originLength) {
+int copy_file(char *buffer, struct EndPoint *origin) {
     int socket = 0;
+    char *payload = buffer + HEADER_SIZE, *packet = NULL;
     struct sockaddr addr;
     socklen_t mySize = sizeof(struct sockaddr); 
     if (setup_socket(&socket, 0) != 0) {
@@ -39,49 +37,56 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     getsockname(socket, &addr, &mySize);
     d("Child process opening ephemeral port %d\n", 
             ntohs(((struct sockaddr_in *)&addr)->sin_port));
-    long filesize = -1, read = 0;
     /* read the request type */
-    if (strncmp(buffer, "WRQ|", 4) != 0) {
-        d("Request was not of valid format or "
-                "filename was the empty string\n");
-
-        return BAD_REQUEST;
-    }
-    char *temp = strchr(buffer, '\0');
-    /* newline is missing or newline immediately follows | */
-    if (temp == NULL) {
+    if (buffer[0] != CMD_WRQ && buffer[1] != 0) {
         d("Request was not of valid format\n");
+        packet = create_packet(CMD_BADREQ, 0, 0, NULL);
+        if (send_packet(socket, origin, packet, &addr)) {
+            perror("Error denying request");
+            exit(RUNTIME_ERROR);
+        }
+        free(packet);
         return BAD_REQUEST;
     }
-    /* remove the \n so we can use it in our file ops */
-    *temp = '\0';
     /* strip any leading directories (stop "/etc/passwd" etc) */ 
-    char *filename = strrchr(buffer + 4, '/');
-    char *separator = strrchr(buffer, '|');
-    if (filename == NULL) {
-        filename = buffer + 4;
-    } else {
-        filename += 1; /* moves it past the '/' char */
-    }
+    char *filename = strrchr(payload, '/');
+    char *separator = strchr(payload, '|');
     if (separator == NULL) {
         d("Missing file size\n");
+        packet = create_packet(CMD_BADREQ, 0, 0, NULL);
+        if (send_packet(socket, origin, packet, &addr)) {
+            perror("Error denying request");
+            exit(RUNTIME_ERROR);
+        }
+        free(packet);
         return BAD_REQUEST;
+    } else {
+        *separator = '\0';
     }
-    d("Valid request recieved: '%s'\n", buffer);
+    if (filename == NULL) {
+        filename = malloc(sizeof(char) * (strlen(payload) + 1));
+        strcpy(filename, payload);
+    } else {
+        char *t = malloc(sizeof(char) * (strlen(filename + 1) + 1));
+        strncpy(t, filename + 1, strlen(filename) + 1);
+        filename = t;
+    }
+
+    d("Valid request recieved: '%s'\n", filename);
     *separator = '\0';
     /* check file doesn't already exist */
     if (access(filename, F_OK) != -1) {
-        d("Given file '%s' already exists\n", buffer + 4);
-        buffer[0] = FILE_EXISTS;
-        if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
-                originLength) != PACKET_SIZE) {
+        d("Given file '%s' already exists\n", filename);
+        packet = create_packet(CMD_EXISTS, 0, 0, NULL);
+        if (send_packet(socket, origin, packet, &addr)) {
             perror("Error denying request");
-            *separator = '\0';
             exit(RUNTIME_ERROR);
         }
+        free(packet);
         return FILE_EXISTS;
     }
     char dummy = '\0';
+    long filesize = -1;
     if (sscanf(separator + 1, "%ld%c", &filesize, &dummy) != 1 
             || filesize < 0) {
         d("Given size invalid\n");
@@ -90,50 +95,56 @@ int copy_file(char *buffer, struct sockaddr_in origin,
     FILE *file = fopen(filename, "w");
     if (file == NULL) {
         perror("Error opening file for writing");
+        packet = create_packet(CMD_EXISTS, 0, 0, NULL);
+        if (send_packet(socket, origin, packet, &addr)) {
+            perror("Error denying request");
+            exit(RUNTIME_ERROR);
+        }
         return CANNOT_CREATE;
     }
     // send an ACK from our new ephemeral port
-    buffer[0] = 'A', buffer[1] = 'C', buffer[2] = 'K', *separator = '|';
     struct sockaddr_in from;
     socklen_t fromSize = sizeof(struct sockaddr_in);
     int size_read = -1;
     time_t startTime = time(NULL);
+    packet = create_packet(CMD_ACK, 1, 0, payload);
     do {
-        print_packet((struct sockaddr_in *)&addr, &origin, buffer, SEND);
-        if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
-                originLength) != PACKET_SIZE) {
+        if (send_packet(socket, origin, packet, &addr)) {
             perror("Error acking request");
             *separator = '\0';
             unlink(filename);
             exit(RUNTIME_ERROR);
         }
         sleep(1);
-        size_read = recvfrom(socket, buffer, PACKET_SIZE, MSG_DONTWAIT,
-                (struct sockaddr *) &from, &fromSize);
     } while (size_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)
             && time(NULL) - startTime < 6);
-    if (size_read < 0) {
-        d("Client timed out\n");
-        *separator = '\0';
-        unlink(filename);
-        exit(TIMEOUT);
-    }
-   
+    free(packet);
+    packet = NULL;
+
+    long read = 0;
+    uint8_t expected_sequence = 1;
     /* read enough bytes */
     while (read < filesize) {
         int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
                 PAYLOAD_SIZE : filesize - read;
-        int actual = recvfrom(socket, buffer, PACKET_SIZE, 0,
-                (struct sockaddr *) &from, &fromSize);
-        read += actual;
-        if (actual < chunksize) {
-            if (actual = 0) {
-                fprintf(stderr, "TODO:  ");
-                d("Read nothing from that recvfrom\n");
-                return BAD_SIZE;
-            }
+        int actual = read_until_timeout(socket, buffer, PACKET_SIZE,
+                MSG_DONTWAIT, origin);
+        if (actual == -1) {
+            d("deleting partial file: %s\n", filename);
+            unlink(filename);
+            exit(TIMEOUT);
+        } else if (buffer[0] != CMD_DATA) {
+            d("Received command %s\n", command2str(buffer[0]));
         } else {
-            int written = fwrite(buffer, sizeof(char), actual, file);
+            if ((uint8_t) buffer[1] != expected_sequence) {
+                packet = create_packet(CMD_ACK, expected_sequence, 0, NULL);
+                send_packet(socket, origin, packet, &addr);
+                free(packet);
+                continue;
+            }
+            actual = ntohs(*(buffer + 2));
+            read += actual;
+            int written = fwrite(payload, sizeof(char), actual, file);
             if (written != actual) {
                 perror("Local write");
                 d("Writing to local file failed\n");
@@ -141,6 +152,8 @@ int copy_file(char *buffer, struct sockaddr_in origin,
             }
         }
     }
+    packet = create_packet(CMD_FIN, 1, 0, NULL);
+    send_packet(socket, origin, packet, &addr);
     d("File transfer complete\n");
     close(socket);
     fclose(file);
@@ -150,6 +163,7 @@ int copy_file(char *buffer, struct sockaddr_in origin,
 void kill_children(void) {
     for (struct ListNode *n = children->head; n != NULL; n = n->next) {
         kill(*((pid_t *) n->data), SIGINT);
+        free(n->data);
     }
 }
 
@@ -173,6 +187,7 @@ void process_connections(int listen_fd) {
         d("Waiting for connection\n", listen_fd);
         int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 0,
                 (struct sockaddr *) &from, &fromSize);
+        *(buffer+2) = GETLEN(buffer);
         print_packet((struct sockaddr_in *)&mine, &from, buffer, RECV);
         if (n == 0) {
             d("Empty message received\n");
@@ -188,7 +203,9 @@ void process_connections(int listen_fd) {
                 break;
             case 0:
                 free(pid);
-                exit(copy_file(buffer, from, fromSize));
+                struct EndPoint origin = 
+                        {.addr.in = &from, .len = fromSize};
+                exit(copy_file(buffer, &origin));
                 break;
             default:
                 d("Recieved request, forked off responder (PID %d)\n", *pid);
