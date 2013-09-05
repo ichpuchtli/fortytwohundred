@@ -32,7 +32,7 @@ int copy_file(FILE *file, int out, char *filename) {
     struct stat s;
     stat(filename, &s);
     long size = s.st_size;
-    fprintf(stream, "WRQ|%s\n%ld\n", filename, size);
+    fprintf(stream, "WRQ|%s\0%ld\0", filename, size);
     fflush(stream);
     d("Request sent\n");
     long written = 0;

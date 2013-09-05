@@ -6,6 +6,7 @@
 #include <wait.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <errno.h>
 
 #include "list.h"
 #include "debug.h"
@@ -19,14 +20,20 @@
 #define CANNOT_CREATE 6
 #define BAD_SIZE 7
 
-#define PACKET_SIZE = 512
+#define PACKET_SIZE 512
+#define HEADER_SIZE 2
+#define PAYLOAD_SIZE PACKET_SIZE - HEADER_SIZE
 
-extern int debug;
+extern int debug, errno;
+
+struct List *children = NULL;
+
+int setup_socket(int *, int); /* socket, portnum (0 = ANY) */
 
 int socket_fd; /* for use in the SIGINT handler */
 
-int copy_file(char *buffer, struct sockaddr_in from, 
-        size_t fromLength) {
+int copy_file(char *buffer, struct sockaddr_in origin, 
+        size_t originLength) {
     int socket = 0;
     if (setup_socket(&socket, 0) != 0) {
         return RUNTIME_ERROR;
@@ -39,7 +46,7 @@ int copy_file(char *buffer, struct sockaddr_in from,
 
         return BAD_REQUEST;
     }
-    char *temp = strchr(buffer, '\n');
+    char *temp = strchr(buffer, '\0');
     /* newline is missing or newline immediately follows | */
     if (temp == NULL) {
         d("Request was not of valid format\n");
@@ -49,12 +56,18 @@ int copy_file(char *buffer, struct sockaddr_in from,
     *temp = '\0';
     /* strip any leading directories (stop "/etc/passwd" etc) */ 
     char *filename = strrchr(buffer + 4, '/');
+    char *separator = strrchr(buffer, '|');
     if (filename == NULL) {
         filename = buffer + 4;
     } else {
         filename += 1; /* moves it past the '/' char */
     }
+    if (separator == NULL) {
+        d("Missing file size\n");
+        return BAD_REQUEST;
+    }
     d("Valid request recieved: '%s'\n", buffer);
+    *separator = '\0';
     /* check file doesn't already exist */
     if (access(filename, F_OK) != -1) {
         d("Given file '%s' already exists\n", buffer + 4);
@@ -66,29 +79,27 @@ int copy_file(char *buffer, struct sockaddr_in from,
         return CANNOT_CREATE;
     }
     char dummy = '\0';
-    if (fgets(buffer, 512, stream) == NULL 
-            || sscanf(buffer, "%ld%c", &filesize, &dummy) != 2 
-            || filesize < 0 || dummy != '\n') {
-        d("Given size missing or invalid\n");
+    if (sscanf(separator + 1, "%ld%c", &filesize, &dummy) != 1 
+            || filesize < 0) {
+        d("Given size invalid\n");
         return BAD_REQUEST;
     }
+
+    struct sockaddr_in from;
+    socklen_t fromSize = sizeof(struct sockaddr_in);
     
     /* read enough bytes */
     while (read < filesize) {
-        int chunksize = (filesize - read > 512) ? 512 : filesize - read;
-        int actual = fread(buffer, sizeof(char), chunksize, stream);
+        int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
+                PAYLOAD_SIZE : filesize - read;
+        int actual = recvfrom(socket, buffer, PACKET_SIZE, 0,
+                (struct sockaddr *) &from, &fromSize);
         read += actual;
         if (actual < chunksize) {
-            if (feof(stream)) {
-                d("Unexpected end of file reached\n");
-                fclose(file);
-                unlink(filename);
+            if (actual = 0) {
+                fprintf(stderr, "TODO:  ");
+                d("Read nothing from that recvfrom\n");
                 return BAD_SIZE;
-            } else if (ferror(stream)) {
-                d("Error encountered while reading file\n");
-                fclose(file);
-                unlink(filename);
-                return RUNTIME_ERROR;
             }
         } else {
             int written = fwrite(buffer, sizeof(char), actual, file);
@@ -99,45 +110,57 @@ int copy_file(char *buffer, struct sockaddr_in from,
             }
         }
     }
-    if (fgetc(stream) != EOF) {
-        d("Extra data recieved\n");
-        return BAD_SIZE;
-    }
     d("File transfer complete\n");
+    close(socket);
     fclose(file);
     return 0;
 }
 
-void process_connections(int listen_fd) {
-    pthread_attr_t attr;
-    if (pthread_attr_init(&attr) != 0) {
-        fprintf(stderr, "pthread_attr_init() failed. "
-                "This function should never fail.");
+void kill_children(void) {
+    for (struct ListNode *n = children->head; n != NULL; n = n->next) {
+        kill(*((pid_t *) n->data), SIGINT);
     }
+}
+
+void process_connections(int listen_fd) {
     socket_fd = listen_fd;
     char *buffer = malloc(sizeof(char) * PACKET_SIZE);
     struct sockaddr_in from;
     socklen_t fromSize = sizeof(from);
+    children = malloc(sizeof(struct List));
+    if (children == NULL) {
+        fprintf(stderr, "malloc() failed, exiting\n");
+        close(listen_fd);
+        exit(RUNTIME_ERROR);
+    }
+    init_list(children);
     while (1) {
         memset(buffer, 0, PACKET_SIZE);
         d("Waiting for connection\n", listen_fd);
-        int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 
+        int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 0,
                 (struct sockaddr *) &from, &fromSize);
         if (n == 0) {
             d("Empty message received\n");
             continue;
         }
-        pid_t pid = fork();
-        switch (pid) {
+        pid_t *pid = malloc(sizeof(pid_t));
+        *pid = fork();
+        switch (*pid) {
             case -1:
                 perror("Fork failed");
                 d("Unable to service request, ignoring\n");
+                free(pid);
                 break;
             case 0:
-                copy_file(buffer, from, fromSize);
+                free(pid);
+                exit(copy_file(buffer, from, fromSize));
                 break;
             default:
-                d("Recieved request, forked off responder\n");
+                d("Recieved request, forked off responder (PID %d)\n", *pid);
+                if (add_to_list(children, (void *) pid) != 0) {
+                    kill_children();
+                    exit(RUNTIME_ERROR);
+                }
                 break;
         }
     }
@@ -147,7 +170,27 @@ void process_connections(int listen_fd) {
 void signal_handler(int sig) {
     if (sig == SIGINT) {
         close(socket_fd);
+        kill_children();
         exit(0);
+    } else if (sig == SIGCHLD) {
+        int status;
+        pid_t pid = 1;
+        while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+            if (WIFSIGNALED(status)) {
+                fprintf(stderr, "Child %d died to signal %d\n", pid, 
+                        WTERMSIG(status));
+            } else if (WIFEXITED(status)) {
+                status = WEXITSTATUS(status);
+                if (status != 0) {
+                    d("Child %d exited with status %d\n", pid, status);
+                } else {
+                    d("Child %d exited normally\n");
+                }
+            }
+        }
+        if (errno != ECHILD) {
+            perror("Error attempting to reap child");
+        }
     }
 }
 
@@ -169,13 +212,6 @@ int setup_socket(int *sock, int port) {
         perror("Error while binding socket");
         return 1;
     }
-    
-    /* listen */
-    if (listen(*sock, SOMAXCONN) == -1) {
-        perror("Error starting listen");
-        return 1;
-    }
-    
     return 0;
 }
 
@@ -220,7 +256,7 @@ int main(int argc, char **argv){
     struct sigaction signals;
     signals.sa_handler = signal_handler;
     signals.sa_flags = SA_RESTART;
-    sigaction(SIGPIPE, &signals, NULL);
+    sigaction(SIGCHLD, &signals, NULL);
     sigaction(SIGINT, &signals, NULL);
     
     /* start listening */
