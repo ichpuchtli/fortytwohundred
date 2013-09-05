@@ -25,60 +25,79 @@ void signal_handler(int signal) {
 
 int copy_file(FILE *file, int sock, char *filename, struct sockaddr *addr,
         socklen_t *addrLen) {
-    FILE *stream = fdopen(sock, "wb");
-    if (stream == NULL) {
-        perror("fdopen(socket_fd)");
-        return RUNTIME_ERROR;
-    }
     char buffer[512] = {0};
     struct stat s;
+    struct sockaddr mine;
+    socklen_t mySize;
+    if (getsockname(sock, &mine, &mySize) == -1) {
+        perror("getting sock name:");
+    }
     stat(filename, &s);
     long size = s.st_size;
     d("Sending request\n");
     time_t startTime = time(NULL);
     int size_read = 0;
+    sprintf(buffer, "WRQ|%s|%ld", filename, size);
     do {
-        fprintf(stream, "WRQ|%s|%ld", filename, size);
-        fflush(stream);
+        print_packet((struct sockaddr_in *)addr, (struct sockaddr_in *) &mine, 
+                buffer, SEND);
+        if (sendto(sock, buffer, PACKET_SIZE, 0, (struct sockaddr *) addr,
+                *addrLen) != PACKET_SIZE) {
+            perror("Error sending request");
+            exit(RUNTIME_ERROR);
+        }
         sleep(1);
         size_read = recvfrom(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
                 addr, addrLen);
-    } while (size_read < 0 && errno == EWOULDBLOCK && time(NULL) - startTime < 6);
+    } while (size_read < 0 && (errno == EWOULDBLOCK || errno == EAGAIN) 
+            && time(NULL) - startTime < 6);
     if (size_read < 0) {
         fprintf(stderr, "Connection to server timed out.\n");
         exit(TIMEOUT);
     }
-    
+    if (buffer[0] == 'A') {
+        d("Request accepted\n");
+    }
     long written = 0;
     while (written < size && !feof(file) && !ferror(file)) {
-        size_t chunksize = fread(buffer, sizeof(char), 512, file);
-        if (fwrite(buffer, sizeof(char), chunksize, stream) != chunksize) {
-            d("Error writing to network stream\n");
-            return RUNTIME_ERROR;
+        size_t chunksize = fread(buffer, sizeof(char), PAYLOAD_SIZE, file);
+        print_packet((struct sockaddr_in *)addr, (struct sockaddr_in *) &mine, 
+                buffer, SEND);
+        if (sendto(sock, buffer, PACKET_SIZE, 0, (struct sockaddr *) addr,
+                *addrLen) != PACKET_SIZE) {
+            perror("Error sending data packet");
+            exit(RUNTIME_ERROR);
         }
+        //if (fwrite(buffer, sizeof(char), chunksize, stream) != chunksize) {
+        //    d("Error writing to network stream\n");
+        //    return RUNTIME_ERROR;
+        //}
     }
-    fflush(stream);
     d("File transfer complete\n");
     return 0;
 }
 
-void process_address(struct addrinfo **addr, char *hostname, char *port) {
+int process_address(struct sockaddr **addr, socklen_t *len, 
+        char *hostname, char *port) {
     struct addrinfo hints;
-
+    struct addrinfo *result = NULL;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;
     hints.ai_protocol = 0;
+    hints.ai_flags = AI_PASSIVE;
     hints.ai_canonname = NULL;
     hints.ai_addr = NULL;
     hints.ai_next = NULL;
-    
     int ai = -1;
-    if ((ai = getaddrinfo(hostname, port, &hints, addr)) != 0) {
+    if ((ai = getaddrinfo(hostname, port, &hints, &result)) != 0) {
+        fprintf(stderr, "%s:%d\n", hostname, port);
         fprintf(stderr, "Error getting address info: %s\n", gai_strerror(ai));
         exit(BAD_PORT);
     }
+    *addr = result->ai_addr;
+    *len = result->ai_addrlen;
+    return 0;
 }
 
 int main(int argc, char **argv){
@@ -123,24 +142,17 @@ int main(int argc, char **argv){
     sigaction(SIGPIPE, &signals, NULL);
     
     /* check address, set up socket, connect */
-    struct addrinfo *addr = NULL;
-    process_address(&addr, argv[1 + debug], argv[2 + debug]);
+    struct sockaddr *addr;
+    socklen_t addrLen;
+    process_address(&addr, &addrLen, argv[1 + debug], argv[2 + debug]);
     d("getaddrinfo() successful\n");
-    int sock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-    if (sock == -1) {
-        perror("Error opening socket");
-        exit(RUNTIME_ERROR);
+    int sock;
+    if (setup_socket(&sock, 0) != 0) {
+        return RUNTIME_ERROR;
     }
-    d("Socket opened successfully, fd: %d\n", sock);
-    if (connect(sock, addr->ai_addr, addr->ai_addrlen) == -1) {
-        perror("Error connecting to server");
-        close(sock);
-        exit(RUNTIME_ERROR);
-    }
-    freeaddrinfo(addr);
-    d("Connected successfully\n");
+    d("Bound successfully\n");
     /* request to write (reads not required in the assignment) */
-    copy_file(file, sock, argv[3 + debug], addr->ai_addr, &(addr->ai_addrlen));
+    copy_file(file, sock, argv[3 + debug], addr, &addrLen);
     d("Exiting without errors\n");
     fclose(file);
     close(sock);

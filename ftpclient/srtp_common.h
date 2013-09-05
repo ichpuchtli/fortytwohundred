@@ -83,4 +83,26 @@ void print_packet(struct sockaddr_in* addr_local, struct sockaddr_in* addr_remot
         ntohs((uint16_t)(pktbuffer[2])));
 }
 
+int setup_socket(int *sock, int port) {
+    /* create socket */
+    *sock = socket(AF_INET, SOCK_DGRAM, 0); /* 0 == any protocol */
+    if (*sock == -1) {
+        perror("Error opening socket");
+        return 1;
+    }
+    d("Socket fd: %d\n", *sock);
+    /* bind */
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;                  //IPv4
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);    //any local IP is good
+    if (bind(*sock, (struct sockaddr*) &addr,
+            sizeof(struct sockaddr_in)) == -1) {
+        perror("Error while binding socket");
+        return 1;
+    }
+    return 0;
+}
+
+
 #endif

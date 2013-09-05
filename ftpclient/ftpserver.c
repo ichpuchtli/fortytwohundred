@@ -96,7 +96,7 @@ int copy_file(char *buffer, struct sockaddr_in origin,
         print_packet((struct sockaddr_in *)&addr, &origin, buffer, SEND);
         if (sendto(socket, buffer, PACKET_SIZE, 0, (struct sockaddr *) &origin,
                 originLength) != PACKET_SIZE) {
-            perror("Error acking request\n");
+            perror("Error acking request");
             *separator = '\0';
             unlink(filename);
             exit(RUNTIME_ERROR);
@@ -152,7 +152,8 @@ void process_connections(int listen_fd) {
     char *buffer = malloc(sizeof(char) * PACKET_SIZE);
     struct sockaddr_in from;
     struct sockaddr mine;
-    getsockname(listen_fd, &mine, NULL);
+    socklen_t myLength;
+    getsockname(listen_fd, &mine, &myLength);
     socklen_t fromSize = sizeof(from);
     children = malloc(sizeof(struct List));
     if (children == NULL) {
@@ -220,27 +221,6 @@ void signal_handler(int sig) {
             perror("Error attempting to reap child");
         }
     }
-}
-
-int setup_socket(int *sock, int port) {
-    /* create socket */
-    *sock = socket(AF_INET, SOCK_DGRAM, 0); /* 0 == any protocol */
-    if (*sock == -1) {
-        perror("Error opening socket");
-        return 1;
-    }
-    d("Socket fd: %d\n", *sock);
-    /* bind */
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;                  //IPv4
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);    //any local IP is good
-    if (bind(*sock, (struct sockaddr*) &addr,
-            sizeof(struct sockaddr_in)) == -1) {
-        perror("Error while binding socket");
-        return 1;
-    }
-    return 0;
 }
 
 int main(int argc, char **argv){
