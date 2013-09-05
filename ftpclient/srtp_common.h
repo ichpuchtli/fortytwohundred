@@ -32,6 +32,9 @@ enum PKTDIR {
   SEND, RECV
 };
 
+#define GETLEN(buf) ntohs(*((uint16_t*)(&buf[2])))
+#define SETLEN(buf, len) (*((uint16_t*)(&buf[2])) = htons(len))
+
 #define d2(...) fprintf(stderr,__VA_ARGS__)
 
 int debug = 0;
@@ -79,8 +82,8 @@ void print_packet(struct sockaddr_in* addr_local, struct sockaddr_in* addr_remot
     d2("[%u] %s | %s:%u %c %s %c %s:%u | seq=%u len=%u\n", 
         getpid(), timestr, str_remote, ntohs(addr_remote->sin_port), arrow, 
         command2str(pktbuffer[0]), arrow, str_local, 
-        ntohs(addr_local->sin_port), pktbuffer[1], 
-        ntohs((uint16_t)(pktbuffer[2])));
+        ntohs(addr_local->sin_port), pktbuffer[1], GETLEN(pktbuffer) 
+        /*ntohs((uint16_t)(pktbuffer[2]))i*/);
 }
 
 int setup_socket(int *sock, int port) {
