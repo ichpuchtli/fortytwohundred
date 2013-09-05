@@ -5,7 +5,8 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include "../srtp/srtp.h"
+
+#include "list.h"
 #include "debug.h"
 
 #define USAGE "USAGE: %s [-d] server port filename\n"
@@ -76,7 +77,6 @@ int main(int argc, char **argv){
             return BAD_ARGS;
         }
         debug = 1;
-        srtp_debug(1);
     } else if (argc == 4) {
         /* -d supplied */
         if (strncmp("-d", argv[1], 2) == 0) {
@@ -112,15 +112,15 @@ int main(int argc, char **argv){
     struct addrinfo *addr = NULL;
     process_address(&addr, argv[1 + debug], argv[2 + debug]);
     d("getaddrinfo() successful\n");
-    int sock = srtp_socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+    int sock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
     if (sock == -1) {
         perror("Error opening socket");
         exit(RUNTIME_ERROR);
     }
     d("Socket opened successfully, fd: %d\n", sock);
-    if (srtp_connect(sock, addr->ai_addr, addr->ai_addrlen) == -1) {
+    if (connect(sock, addr->ai_addr, addr->ai_addrlen) == -1) {
         perror("Error connecting to server");
-        srtp_close(sock, RUNTIME_ERROR);
+        close(sock);
         exit(RUNTIME_ERROR);
     }
     freeaddrinfo(addr);
@@ -129,6 +129,6 @@ int main(int argc, char **argv){
     copy_file(file, sock, argv[3 + debug]);
     d("Exiting without errors\n");
     fclose(file);
-    srtp_close(sock, 0);
+    close(sock);
     return 0;
 }

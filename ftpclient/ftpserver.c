@@ -6,7 +6,8 @@
 #include <wait.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "../srtp/srtp.h"
+
+#include "list.h"
 #include "debug.h"
 
 #define USAGE "USAGE: %s [-d] port\n"
@@ -18,19 +19,24 @@
 #define CANNOT_CREATE 6
 #define BAD_SIZE 7
 
+#define PACKET_SIZE = 512
+
 extern int debug;
 
 int socket_fd; /* for use in the SIGINT handler */
 
-int copy_file(int in) {
-    FILE *stream = fdopen(in, "r");
-    char buffer[512] = {'\0'}; //WRQ|filename\nsize\n\0
+int copy_file(char *buffer, struct sockaddr_in from, 
+        size_t fromLength) {
+    int socket = 0;
+    if (setup_socket(&socket, 0) != 0) {
+        return RUNTIME_ERROR;
+    }
     long filesize = -1, read = 0;
     /* read the request type */
-    if (fgets(buffer, 512, stream) == NULL || strlen(buffer) < 6 
-            || strncmp(buffer, "WRQ|", 4) != 0) {
+    if (strncmp(buffer, "WRQ|", 4) != 0) {
         d("Request was not of valid format or "
                 "filename was the empty string\n");
+
         return BAD_REQUEST;
     }
     char *temp = strchr(buffer, '\n');
@@ -102,15 +108,6 @@ int copy_file(int in) {
     return 0;
 }
 
-void *client_thread(void *arg) {
-    int fd = *((int *)arg);
-    free(arg);
-    int state = copy_file(fd);
-    d("Child terminating\n");
-    srtp_close(fd, state);
-    return NULL;
-}
-
 void process_connections(int listen_fd) {
     pthread_attr_t attr;
     if (pthread_attr_init(&attr) != 0) {
@@ -118,40 +115,45 @@ void process_connections(int listen_fd) {
                 "This function should never fail.");
     }
     socket_fd = listen_fd;
+    char *buffer = malloc(sizeof(char) * PACKET_SIZE);
+    struct sockaddr_in from;
+    socklen_t fromSize = sizeof(from);
     while (1) {
-        struct sockaddr_in from;
-        socklen_t fromSize = sizeof(from);
+        memset(buffer, 0, PACKET_SIZE);
         d("Waiting for connection\n", listen_fd);
-        int *conn = (int *) malloc(sizeof(int));
-        *conn = srtp_accept(listen_fd, (struct sockaddr *) &from, &fromSize);
-        if (*conn == -1) {
-            perror("Accept failed");
-            break;
+        int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 
+                (struct sockaddr *) &from, &fromSize);
+        if (n == 0) {
+            d("Empty message received\n");
             continue;
         }
-        pthread_t thread;
-        if (pthread_create(&thread, &attr, &client_thread, (void *) conn)) {
-            perror("Client thread creation failed:");
-            close(*conn);
-            free(conn);
-            continue;
+        pid_t pid = fork();
+        switch (pid) {
+            case -1:
+                perror("Fork failed");
+                d("Unable to service request, ignoring\n");
+                break;
+            case 0:
+                copy_file(buffer, from, fromSize);
+                break;
+            default:
+                d("Recieved request, forked off responder\n");
+                break;
         }
-        pthread_detach(thread);
-        d("Accepted connection, thread started\n");
     }
 }
 
 /* this is just here to stop SIGPIPE crashing the server */
 void signal_handler(int sig) {
     if (sig == SIGINT) {
-        srtp_close(socket_fd, 0);
+        close(socket_fd);
         exit(0);
     }
 }
 
 int setup_socket(int *sock, int port) {
     /* create socket */
-    *sock = srtp_socket(AF_INET, SOCK_STREAM, 0); /* 0 == any protocol */
+    *sock = socket(AF_INET, SOCK_DGRAM, 0); /* 0 == any protocol */
     if (*sock == -1) {
         perror("Error opening socket");
         return 1;
@@ -160,16 +162,16 @@ int setup_socket(int *sock, int port) {
     /* bind */
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;                  //IPv4
-    addr.sin_port = port;//htons(port);
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);    //any local IP is good
-    if (srtp_bind(*sock, (struct sockaddr*) &addr,
+    if (bind(*sock, (struct sockaddr*) &addr,
             sizeof(struct sockaddr_in)) == -1) {
         perror("Error while binding socket");
         return 1;
     }
     
     /* listen */
-    if (srtp_listen(*sock, SOMAXCONN) == -1) {
+    if (listen(*sock, SOMAXCONN) == -1) {
         perror("Error starting listen");
         return 1;
     }
@@ -186,7 +188,7 @@ int main(int argc, char **argv){
             fprintf(stderr, USAGE, argv[0]);
             return BAD_ARGS;
         }
-        srtp_debug(debug = 1);
+        debug = 1;
     } else if (argc == 2) {
         /* -d supplied */
         if (strncmp("-d", argv[1], 2) == 0) {
