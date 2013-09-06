@@ -159,9 +159,9 @@ char *create_packet(uint8_t command, uint8_t sequence, uint16_t payloadSize,
     return buffer;
 } 
 
-size_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
+ssize_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
         struct sockaddr *wanted, socklen_t *wantedSize) {
-    size_t read = 0;
+    ssize_t read = 0;
     char *temp = malloc(sizeof(char) * packetSize);
     if (temp == NULL) {
         return -1;
@@ -170,27 +170,23 @@ size_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
     socklen_t fromSize;
     read = recvfrom(sock, temp, packetSize, flags, &from, &fromSize);
     // is this from the endpoint we care about?
-    if (read > 0 && !memcmp(from.sa_data, wanted->sa_data, 14)) {
-        if (read == -1 && errno == EWOULDBLOCK) {
-            fprintf(stderr, ".");
-        }
+    if (1 || read > 0 && !memcmp(from.sa_data, wanted->sa_data, 14)) {
         memcpy(buffer, temp, packetSize);
-        *(buffer+2) = GETLEN(buffer);
         free(temp);
         return read;
     }
-    //d("Discarding foreign packet\n");
+    d("Discarding foreign packet\n");
     //no? well, ignore it
     free(temp);
     errno = EAGAIN;
     return -1;
 }
 
-size_t read_until_timeout(int socket, char *buffer, size_t packetSize, int flags,
+ssize_t read_until_timeout(int socket, char *buffer, size_t packetSize, int flags,
         struct EndPoint *end) {
     time_t startTime = time(NULL);
     int read;
-    while (time(NULL) - startTime < 6) {
+    while (time(NULL) - startTime < 10000000) {
         read = read_only_from(socket, buffer, PACKET_SIZE, MSG_DONTWAIT,
                 end->addr.base, &end->len);
         if (read > 0) {

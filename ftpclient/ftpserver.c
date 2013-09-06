@@ -128,6 +128,10 @@ int copy_file(char *buffer, struct EndPoint *origin) {
 
     long read = 0;
     uint8_t expected_sequence = 1;
+
+    ////////////////////////////////////////////////////////////////////////////////
+    /// Read Data & Write file
+
     /* read enough bytes */
     while (read < filesize) {
         int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
@@ -141,12 +145,16 @@ int copy_file(char *buffer, struct EndPoint *origin) {
         } else if (buffer[0] != CMD_DATA) {
             d("Received command %s\n", command2str(buffer[0]));
         } else {
-            if ((uint8_t) buffer[1] != expected_sequence) {
+            if ((uint8_t) buffer[1] != expected_sequence){
                 packet = create_packet(CMD_ACK, expected_sequence, 0, NULL);
                 send_packet(socket, origin, packet, &addr);
-                //free(packet);
+                free(packet);
                 continue;
             }
+
+            packet = create_packet(CMD_ACK, expected_sequence++, 0, NULL);
+            send_packet(socket, origin, packet, &addr);
+
             actual = ntohs(*(buffer + 2));
             read += actual;
             int written = fwrite(payload, sizeof(char), actual, file);
@@ -157,6 +165,9 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             }
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////
+
     packet = create_packet(CMD_FIN, 1, 0, NULL);
     send_packet(socket, origin, packet, &addr);
     d("File transfer complete\n");

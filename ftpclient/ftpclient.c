@@ -49,7 +49,6 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
     /// Connection Establishment
     sprintf(payload, "%s|%ld", filename, size);
     char *request = create_packet(CMD_WRQ, 0, strlen(payload), payload);
-    //request[1] = request[2] = request[3] = 1; /* can't have 0 in any of these*/
     do {
         d("Sending request\n");
         if (send_packet(sock, target, request, &mine)) {
@@ -80,8 +79,8 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
     }
    ////////////////////////////////////////////////////////////////////////////////
 
-    long written = 0, read = 0;
-    uint8_t sequence = 0;
+    long written =-1, read = 0;
+    uint8_t sequence = 1;
     struct List *packets = malloc(sizeof(struct List));
     init_list(packets);
 
@@ -89,6 +88,7 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
    ////////////////////////////////////////////////////////////////////////////////
    /// Data Transfer
     while (written < size && !feof(file) && !ferror(file)) {
+        if (written < 0) written = 0;
         /* read enough for our window */
         while (packets->size < WINDOW_SIZE && read < size) {
 
@@ -99,6 +99,7 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
 
             add_to_list(packets, 
                     create_packet(CMD_DATA, sequence++, chunksize, payload));
+            fprintf(stderr, "packet created of size: %d\n", read);
             read += chunksize;
         }
         /* send the whole window's worth */
@@ -106,12 +107,12 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
             perror("Error sending data packet");
             exit(RUNTIME_ERROR);
         }
-        size_t r = read_until_timeout(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+        ssize_t r = read_until_timeout(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
                  target);
         if (buffer[0] == CMD_FIN) {
             break;
         }
-        fprintf(stderr, "%u read\n", r);
+        fprintf(stderr, "%d read\n", r);
         if (r < 0) {
             exit(TIMEOUT);
         }
