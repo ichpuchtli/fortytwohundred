@@ -26,6 +26,14 @@ extern int debug, errno;
 struct List *children = NULL;
 int socket_fd;
 
+/**
+ * @brief copy a file into a buffer from a remote address
+ *
+ * @param buffer the buffer to temporarily store file data
+ * @param origin the origin of the data
+ *
+ * @return 0 on success, non zero otherwise
+ */
 int copy_file(char *buffer, struct EndPoint *origin) {
     int socket = 0;
 
@@ -120,8 +128,8 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             unlink(filename);
             exit(RUNTIME_ERROR);
         }
-        usleep(10000);
-        size_read = recvfrom(socket, buffer, PACKET_SIZE, MSG_PEEK, (struct sockaddr *) &from, &fromSize);
+        usleep( 10000 );
+        size_read = recvfrom( socket, buffer, PACKET_SIZE, MSG_PEEK, ( struct sockaddr* ) &from, &fromSize );
     } while (size_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)
             && time(NULL) - startTime < 6);
     free(packet);
@@ -135,6 +143,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
 
     /* read enough bytes */
     while (1) {
+
         ssize_t actual = read_until_timeout(socket, buffer, PACKET_SIZE,
                 MSG_DONTWAIT, origin);
         if (actual == -1) {
@@ -199,6 +208,9 @@ int copy_file(char *buffer, struct EndPoint *origin) {
     return 0;
 }
 
+/**
+ * @brief kill all children of a parent process
+ */
 void kill_children(void) {
     for (struct ListNode *n = children->head; n != NULL; n = n->next) {
         kill(*((pid_t *) n->data), SIGINT);
@@ -206,6 +218,12 @@ void kill_children(void) {
     }
 }
 
+/**
+ * @brief accept new connections and dispatch child processes to handle
+ * the connection
+ *
+ * @param listen_fd the UDP socket to wait on for new connections
+ */
 void process_connections(int listen_fd) {
     socket_fd = listen_fd;
     char buffer[PACKET_SIZE];

@@ -25,12 +25,29 @@ void signal_handler(int signal) {
     exit(RUNTIME_ERROR);
 }
 
+/**
+ * @brief get the file size of a file
+ *
+ * @param filename the file path of the file
+ *
+ * @return the size in bytes of the file
+ */
 long get_file_size(char *filename) {
     struct stat s;
     stat(filename, &s);
     return s.st_size;
 }
 
+/**
+ * @brief establish a SRTP connection with a host
+ *
+ * @param sock the UDP socket to communicate on
+ * @param buffer the buffer to store send/recv data
+ * @param size the maximum size of the buffer
+ * @param filename the filename to store on the server
+ * @param target the target address of the host
+ * @param mine the local address
+ */
 void complete_request(int sock, char *buffer, long size, char *filename,
         struct EndPoint *target, struct sockaddr *mine) {
       char *payload = buffer + HEADER_SIZE;
@@ -73,6 +90,16 @@ void complete_request(int sock, char *buffer, long size, char *filename,
 }
 
 
+/**
+ * @brief transfer data to the ftpserver until all data is acknowledged
+ *
+ * @param file the file to copy
+ * @param sock the UDP socket to transfer the data on
+ * @param filename the filename of the file
+ * @param target the target address of the ftpserver
+ *
+ * @return 0 on success, non zero otherwise
+ */
 int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
     char buffer[PACKET_SIZE] = {0};
     char *payload = buffer + HEADER_SIZE;
@@ -105,9 +132,9 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
                     size - read : PAYLOAD_SIZE;
 
             size_t chunksize = fread(payload, sizeof(char), remaining, file);
-            // if there's nothing to send
-            if (chunksize == 0) {
-                break;
+
+            if (  chunksize == 0 ){
+              break;
             }
 
             add_to_list(packets,
@@ -196,12 +223,22 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
             break;
         }
     }
-            
+
     free(packet);
     d("File transfer complete\n");
     return 0;
 }
 
+/**
+ * @brief resolve a host address
+ *
+ * @param addr the address structure to store the address in
+ * @param len the length of the address structure
+ * @param hostname th host name of the host
+ * @param port the port to connect it to
+ *
+ * @return 0 on success, non zero otherwise
+ */
 int process_address(struct sockaddr **addr, socklen_t *len, 
         char *hostname, char *port) {
     struct addrinfo hints;
@@ -224,6 +261,14 @@ int process_address(struct sockaddr **addr, socklen_t *len,
     return 0;
 }
 
+/**
+ * @brief check the arguments reseted to the application
+ *
+ * @param argc argument count
+ * @param argv argument values
+ *
+ * @return 0 on success, non zero otherwise
+ */
 int arg_check(int argc, char **argv) {
     if (argc == 5) {
         /* -d not supplied */
