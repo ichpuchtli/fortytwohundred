@@ -185,8 +185,8 @@ ssize_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
 ssize_t read_until_timeout(int socket, char *buffer, size_t packetSize, int flags,
         struct EndPoint *end) {
     time_t startTime = time(NULL);
-    int read;
-    while (time(NULL) - startTime < 10000000) {
+    ssize_t read;
+    while (time(NULL) - startTime < 6) {
         read = read_only_from(socket, buffer, PACKET_SIZE, MSG_DONTWAIT,
                 end->addr.base, &end->len);
         if (read > 0) {

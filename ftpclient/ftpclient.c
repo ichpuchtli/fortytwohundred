@@ -79,7 +79,7 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
     }
    ////////////////////////////////////////////////////////////////////////////////
 
-    long written =-1, read = 0;
+    long written = 0, read = 0;
     uint8_t sequence = 1;
     struct List *packets = malloc(sizeof(struct List));
     init_list(packets);
@@ -88,7 +88,6 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
    ////////////////////////////////////////////////////////////////////////////////
    /// Data Transfer
     while (written < size && !feof(file) && !ferror(file)) {
-        if (written < 0) written = 0;
         /* read enough for our window */
         while (packets->size < WINDOW_SIZE && read < size) {
 
@@ -99,7 +98,6 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
 
             add_to_list(packets, 
                     create_packet(CMD_DATA, sequence++, chunksize, payload));
-            fprintf(stderr, "packet created of size: %d\n", read);
             read += chunksize;
         }
         /* send the whole window's worth */
@@ -108,8 +106,16 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
             exit(RUNTIME_ERROR);
         }
         ssize_t r = read_until_timeout(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
-                 target);
-        if (buffer[0] == CMD_FIN) {
+                target);
+        print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
+        if (buffer[0] == CMD_ACK) {
+            while (packets->head != NULL 
+                    && ((char *) packets->head->data)[1] < buffer[1]) {
+                free(packets->head->data);
+                remove_front(packets);
+                written += PAYLOAD_SIZE;
+            }
+        } else if (buffer[0] == CMD_FIN) {
             break;
         }
         fprintf(stderr, "%d read\n", r);
@@ -118,7 +124,9 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
         }
     }
    ////////////////////////////////////////////////////////////////////////////////
-
+    char *packet = create_packet(CMD_FIN, 1, 0, NULL);
+    send_packet(sock, target, packet, &mine);
+    free(packet);
     d("File transfer complete\n");
     return 0;
 }

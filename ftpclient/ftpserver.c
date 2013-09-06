@@ -87,7 +87,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             perror("Error denying request");
             exit(RUNTIME_ERROR);
         }
-        //free(packet);
+        free(packet);
         return FILE_EXISTS;
     }
     char dummy = '\0';
@@ -123,7 +123,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
         sleep(1);
     } while (size_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)
             && time(NULL) - startTime < 6);
-    //free(packet);
+    free(packet);
     packet = NULL;
 
     long read = 0;
@@ -136,26 +136,28 @@ int copy_file(char *buffer, struct EndPoint *origin) {
     while (read < filesize) {
         int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
                 PAYLOAD_SIZE : filesize - read;
-        int actual = read_until_timeout(socket, buffer, PACKET_SIZE,
+        ssize_t actual = read_until_timeout(socket, buffer, PACKET_SIZE,
                 MSG_DONTWAIT, origin);
         if (actual == -1) {
             d("deleting partial file: %s\n", filename);
             unlink(filename);
             exit(TIMEOUT);
-        } else if (buffer[0] != CMD_DATA) {
-            d("Received command %s\n", command2str(buffer[0]));
-        } else {
+        }
+        print_packet((struct sockaddr_in *)&addr, &from, buffer, RECV);
+        if (buffer[0] == CMD_DATA) {
+            // this is not the packet you're looking for
             if ((uint8_t) buffer[1] != expected_sequence){
                 packet = create_packet(CMD_ACK, expected_sequence, 0, NULL);
                 send_packet(socket, origin, packet, &addr);
                 free(packet);
                 continue;
             }
-
-            packet = create_packet(CMD_ACK, expected_sequence++, 0, NULL);
+            // ack our desired packet
+            packet = create_packet(CMD_ACK, ++expected_sequence, 0, NULL);
             send_packet(socket, origin, packet, &addr);
-
-            actual = ntohs(*(buffer + 2));
+            free(packet);
+            // then write the appropriate amount to file
+            actual = GETLEN(buffer);
             read += actual;
             int written = fwrite(payload, sizeof(char), actual, file);
             if (written != actual) {
@@ -163,13 +165,18 @@ int copy_file(char *buffer, struct EndPoint *origin) {
                 d("Writing to local file failed\n");
                 return RUNTIME_ERROR;
             }
-        }
+        } else if (buffer[0] == CMD_FIN) {
+            break;
+        } else {
+            d("Received command %s\n", command2str(buffer[0]));
+        } 
     }
 
     ////////////////////////////////////////////////////////////////////////////////
 
     packet = create_packet(CMD_FIN, 1, 0, NULL);
     send_packet(socket, origin, packet, &addr);
+    free(packet);
     d("File transfer complete\n");
     close(socket);
     fclose(file);
@@ -203,7 +210,6 @@ void process_connections(int listen_fd) {
         d("Waiting for connection\n", listen_fd);
         int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 0,
                 (struct sockaddr *) &from, &fromSize);
-        //buffer[2] = (uint16_t) GETLEN(buffer);
 
         print_packet((struct sockaddr_in *)&mine, &from, buffer, RECV);
         if (n == 0) {
