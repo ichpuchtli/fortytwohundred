@@ -6,7 +6,6 @@ Reliable UDP integrated with a simple one-way client to server file transfer app
 To compile:
 
     $ make
-    $ make test
     
 To run the FTP Server:
 
@@ -20,25 +19,26 @@ Optional [-d]:
 Flag to output debug messages
     
 Expected behaviour of Server:  
-Server will wait indefinitely for incoming connections  
-Bad requests to the server will be ignored  
-Write requests will be ignored if the file already exists on the server  
-If the file cannot be written on the server it will be ignored  
-Requests that cannot be acked will be ignored  
-Partial files will be discarded in the case of connection timeout  
-Incomplete files will be discarded after a successful transfer  
-The socket to the client will be closed upon successful file transfer  
+* Server will wait indefinitely for incoming connections  
+* Bad requests to the server will be ignored  
+* Write requests will be rejected if the file already exists on the server  
+* If the file cannot be written on the server it will be rejected  
+* Data packets whose sequence number is out of order will be ignored
+* Partial files will be discarded in the case of connection timeout  
+* Incomplete files will be discarded in the case of a terminated transfer  
+* The socket to the client will be closed upon successful file transfer  
 
 Expected behaviour of Client:  
-If the client cannot send a request to the server it will close  
-If the connection to the server is lost the client will close  
-If the client receives a file already exists response from the server it will close  
-If the server rejects a request the client will close  
-If a packet cannot be sent the client will close  
-If the server closes the connection unexpectedly the client will close  
-Client will exit with status 0 upon successful file transfer  
+* If the client cannot send a request to the server it will close  
+* If the connection to the server is lost the client will close  
+* If the client receives a file already exists response from the server it will close  
+* If the server rejects a request the client will close  
+* If any data packet is never ACKed as received within a timeout period the client will close  
+* If the server closes the connection unexpectedly the client will close  
+* Client will exit with status 0 upon successful file transfer  
 
-A transfer is assumed to be successful if the file created on the server does not differ to the one sent by the client
+
+SRTP API documentation is available in the /doc folder
 
 ## License
 GPLv3
