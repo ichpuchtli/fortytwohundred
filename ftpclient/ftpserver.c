@@ -133,7 +133,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
     /// Read Data & Write file
 
     /* read enough bytes */
-    while (read < filesize) {
+    while (1) {
         int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
                 PAYLOAD_SIZE : filesize - read;
         ssize_t actual = read_until_timeout(socket, buffer, PACKET_SIZE,
@@ -165,25 +165,36 @@ int copy_file(char *buffer, struct EndPoint *origin) {
                 d("Writing to local file failed\n");
                 return RUNTIME_ERROR;
             }
+            if (read > filesize) {
+                d("Excess data recieved, deleting file\n");
+                unlink(filename);
+                exit(BAD_REQUEST);
+            }
         } else if (buffer[0] == CMD_FIN) {
-
           if ( read != filesize ){
-            d("deleting uncomplete file: %s\n", filename);
+            d("Deleting uncomplete file: %s\n", filename);
             unlink(filename);
-            exit( -13 );
+            exit( BAD_REQUEST );
           }
-
-        } else {
-            d("Received command %s\n", command2str(buffer[0]));
-        } 
+          time_t t = time(NULL);
+          packet = create_packet(CMD_FINACK, 0, 0, NULL);
+          while (time(NULL) - t < ACK_TIMEOUT) {
+            send_packet(socket, origin, packet, &addr);
+            usleep(100000);
+            size_t r = read_only_from(socket, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                    origin->addr.base, &origin->len);
+            if (r > 0 && buffer[0] == CMD_ACK) {
+                print_packet((struct sockaddr_in *)&addr, &from, buffer, RECV);
+                // FINACK has been ACKed
+                break;
+            }
+          }
+          break;
+        }
     }
-
-    ////////////////////////////////////////////////////////////////////////////////
-
-    packet = create_packet(CMD_FIN, 1, 0, NULL);
-    send_packet(socket, origin, packet, &addr);
     free(packet);
     d("File transfer complete\n");
+
     close(socket);
     fclose(file);
     return 0;

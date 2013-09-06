@@ -31,21 +31,9 @@ long get_file_size(char *filename) {
     return s.st_size;
 }
 
-int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
-    char buffer[PACKET_SIZE] = {0};
-    char *payload = buffer + HEADER_SIZE;
-
-    long size = get_file_size(filename);
-    struct sockaddr mine;
-
-    socklen_t mySize;
-    if (getsockname(sock, &mine, &mySize) == -1) {
-        perror("getting sock name:");
-    }
-
-
-    {
-
+void complete_request(int sock, char *buffer, long size, char *filename,
+        struct EndPoint *target, struct sockaddr *mine) {
+      char *payload = buffer + HEADER_SIZE;
       int size_read = 0;
       time_t startTime = time(NULL);
 
@@ -55,7 +43,7 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
       char *request = create_packet(CMD_WRQ, 0, strlen(payload), payload);
       do {
           d("Sending request\n");
-          if (send_packet(sock, target, request, &mine)) {
+          if (send_packet(sock, target, request, mine)) {
               perror("Error sending request");
               exit(RUNTIME_ERROR);
           }
@@ -69,7 +57,7 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
           fprintf(stderr, "Connection to server timed out.\n");
           exit(TIMEOUT);
       }
-      print_packet((struct sockaddr_in *) &mine, target->addr.in, buffer, RECV);
+      print_packet((struct sockaddr_in *) mine, target->addr.in, buffer, RECV);
 
       if (buffer[0] == CMD_ACK) {
           d("Request accepted\n");
@@ -80,24 +68,38 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
       } else if (buffer[0] == CMD_BADREQ) {
           fprintf(stderr, "Server rejected request as badly formed\n");
           exit(BAD_REQUEST);
-      }
-
     }
-   ////////////////////////////////////////////////////////////////////////////////
 
+}
+
+
+int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
+    char buffer[PACKET_SIZE] = {0};
+    char *payload = buffer + HEADER_SIZE;
+
+    long size = get_file_size(filename);
+    struct sockaddr mine;
+
+    socklen_t mySize;
+    if (getsockname(sock, &mine, &mySize) == -1) {
+        perror("getting sock name:");
+    }
+    // make our request to the server, exits if timeout
+    complete_request(sock, buffer, size, filename, target, &mine);
+
+    // set up for data transfer
     long written = 0, read = 0;
     uint16_t sequence = 1;
     struct List *packets = malloc(sizeof(struct List));
     init_list(packets);
 
-
     time_t lastACK = time( NULL );
 
    ////////////////////////////////////////////////////////////////////////////////
    /// Data Transfer
-    while (buffer[0] != CMD_FIN  && !feof(file) && !ferror(file)) {
+    while (written != size) {
         /* read enough for our window */
-        while (packets->size < WINDOW_SIZE && read < size) {
+        while (packets->size < WINDOW_SIZE && written < size) {
 
             size_t remaining = size - read < PAYLOAD_SIZE ?
                     size - read : PAYLOAD_SIZE;
@@ -165,17 +167,32 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
           } else {
             d( "Received unknown packet command\n" );
           }
-
-
-        }
-
-        if (read < 0) {
-            //exit(TIMEOUT);
         }
     }
+    d("closing connection\n");
    ////////////////////////////////////////////////////////////////////////////////
-    char *packet = create_packet(CMD_FIN, 1, 0, NULL); //TODO FIN ACK
-    send_packet(sock, target, packet, &mine);
+    char *packet = create_packet(CMD_FIN, 0, 0, NULL);
+    ssize_t r;
+    usleep(10000);
+    lastACK = time(NULL);
+    while (time(NULL) - lastACK < ACK_TIMEOUT) {
+        send_packet(sock, target, packet, &mine);
+        usleep(100000);
+        r = read_only_from(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                target->addr.base, &target->len);
+        // ignore leftover ACKs from the data packets
+        while (r > 0 && buffer[0] == CMD_ACK) {
+          print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
+          r = read_only_from(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                target->addr.base, &target->len);
+        }
+        print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
+        if (buffer[0] == CMD_FINACK) {
+            // FIN has been ACKed
+            break;
+        }
+    }
+            
     free(packet);
     d("File transfer complete\n");
     return 0;

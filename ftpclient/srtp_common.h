@@ -22,11 +22,12 @@
 #define CMD_DATA ((uint8_t)4)
 #define CMD_WRQ ((uint8_t)5)
 #define CMD_FIN ((uint8_t)6)
+#define CMD_FINACK ((uint8_t)7)
 //...
-#define MAX_CMD_VALUE ((uint8_t)6)
+#define MAX_CMD_VALUE ((uint8_t)7)
 
 const char* command_strings[(size_t)(MAX_CMD_VALUE+1)]={
-    "", "ACK", "BRQ", "FEX", "DAT", "WRQ", "FIN"
+    "", "ACK", "BRQ", "FEX", "DAT", "WRQ", "FIN", "F+A"
 };
 
 #define PACKET_SIZE 2048
