@@ -41,10 +41,10 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
     if (getsockname(sock, &mine, &mySize) == -1) {
         perror("getting sock name:");
     }
-    
+
     time_t startTime = time(NULL);
     int size_read = 0;
-    
+
     ////////////////////////////////////////////////////////////////////////////////
     /// Connection Establishment
     sprintf(payload, "%s|%ld", filename, size);
@@ -87,16 +87,16 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
 
    ////////////////////////////////////////////////////////////////////////////////
    /// Data Transfer
-    while (written < size && !feof(file) && !ferror(file)) {
+    while (buffer[0] != CMD_FIN  && !feof(file) && !ferror(file)) {
         /* read enough for our window */
         while (packets->size < WINDOW_SIZE && read < size) {
 
-            size_t remaining = size - read < PAYLOAD_SIZE ? 
+            size_t remaining = size - read < PAYLOAD_SIZE ?
                     size - read : PAYLOAD_SIZE;
 
             size_t chunksize = fread(payload, sizeof(char), remaining, file);
 
-            add_to_list(packets, 
+            add_to_list(packets,
                     create_packet(CMD_DATA, sequence++, chunksize, payload));
             read += chunksize;
         }
@@ -107,17 +107,29 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
         }
         ssize_t r = read_until_timeout(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
                 target);
+
         print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
+
+        uint8_t acked_seq = buffer[1];
+
+        uint8_t first_seq = (( char* )packets->head->data)[1];
+
+        size_t len = packets->size;
+
         if (buffer[0] == CMD_ACK) {
-            while (packets->head != NULL 
-                    && ((char *) packets->head->data)[1] < buffer[1]) {
-                free(packets->head->data);
-                remove_front(packets);
-                written += PAYLOAD_SIZE;
+
+            while (packets->head != NULL ) {
+
+                if ( ( 0 <= ( ( int ) acked_seq - ( int ) first_seq ) % 255 ) &&
+                    ( ( ( int ) acked_seq - ( int ) first_seq ) % 255 < len ) ) {
+
+                  free(packets->head->data);
+                  remove_front(packets);
+                  written += PAYLOAD_SIZE;
+                }
             }
-        } else if (buffer[0] == CMD_FIN) {
-            break;
         }
+
         fprintf(stderr, "%d read\n", r);
         if (r < 0) {
             exit(TIMEOUT);
@@ -202,13 +214,13 @@ int main(int argc, char **argv){
     signals.sa_handler = signal_handler;
     signals.sa_flags = SA_RESTART;
     sigaction(SIGPIPE, &signals, NULL);
-    
+
     /* check address, set up socket, connect */
     struct EndPoint target;
     process_address(&target.addr.base, &target.len, argv[1 + debug],
             argv[2 + debug]);
     d("getaddrinfo() successful\n");
-    
+
     int sock;
     if (setup_socket(&sock, 0) != 0) {
         return RUNTIME_ERROR;

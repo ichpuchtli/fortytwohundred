@@ -50,7 +50,7 @@ void remove_front(struct List *list) {
     struct ListNode *f = list->head;
     list->head = f->next;
     free(f);
+    list->size--;
 }
-
 
 #endif
