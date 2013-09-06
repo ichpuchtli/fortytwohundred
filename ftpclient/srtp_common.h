@@ -29,18 +29,33 @@ const char* command_strings[(size_t)(MAX_CMD_VALUE+1)]={
     "", "ACK", "BRQ", "FEX", "DAT", "WRQ", "FIN"
 };
 
-#define PACKET_SIZE 512
-#define HEADER_SIZE 4
+#define PACKET_SIZE 2048
+#define HEADER_SIZE 5
 #define PAYLOAD_SIZE (PACKET_SIZE - HEADER_SIZE)
 
 #define WINDOW_SIZE 50
+
+#define ACK_TIMEOUT 2
 
 enum PKTDIR {
   SEND, RECV
 };
 
-#define GETLEN(buf) ntohs(*((uint16_t*)(&buf[2])))
-#define SETLEN(buf, len) (*((uint16_t*)(&buf[2])) = htons(len))
+uint16_t GETLEN( char* buffer ){
+
+  uint16_t* len = ( uint16_t* )( buffer + 3 );
+
+  return  ntohs( *len );
+
+}
+
+void SETLEN(char* buffer, uint16_t len ){
+
+  uint16_t* len_ptr = ( uint16_t* )( buffer + 3 );
+
+  *len_ptr = htons( len );
+
+}
 
 #define d2(...) fprintf(stderr,__VA_ARGS__)
 
@@ -60,6 +75,22 @@ void d(const char *format, ...) {
     }
 }
 
+uint16_t get_seq_num( char* buffer ) {
+
+  uint16_t* seq = ( uint16_t* )( buffer + 1 );
+
+  return  ntohs( *seq );
+
+}
+
+void set_seq_num( char* buffer, uint16_t seq_num ) {
+
+  uint16_t* seq = ( uint16_t* )( buffer + 1 );
+
+  *seq = htons( seq_num );
+
+}
+
 char* command2str(uint8_t command) {
     static char s[16];
 
@@ -71,27 +102,31 @@ char* command2str(uint8_t command) {
 
 void print_packet(struct sockaddr_in* addr_local,
         struct sockaddr_in* addr_remote, char* pktbuffer, enum PKTDIR dir) {
-    char timestr[32]={'\0'};
-    char str_remote[32];
-    char str_local[32];
-    char arrow='<';
-    time_t rawtime;
-    struct tm * timeinfo;
 
-    arrow = (dir==SEND?'<':'>');
+    if ( debug ){
 
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-    strftime(timestr,32,"%H:%M:%S",timeinfo);
+      char timestr[32]={'\0'};
+      char str_remote[32];
+      char str_local[32];
+      char arrow='<';
+      time_t rawtime;
+      struct tm * timeinfo;
 
-    strncpy(str_remote,inet_ntoa(addr_remote->sin_addr),32);
-    strncpy(str_local,inet_ntoa(addr_local->sin_addr),32);
+      arrow = (dir==SEND?'<':'>');
 
-    d2("[%u] %s | %s:%u %c %s %c %s:%u | seq=%u len=%u\n", 
-        getpid(), timestr, str_remote, ntohs(addr_remote->sin_port), arrow, 
-        command2str(pktbuffer[0]), arrow, str_local, 
-        ntohs(addr_local->sin_port), pktbuffer[1], GETLEN(pktbuffer) 
-        /*ntohs((uint16_t)(pktbuffer[2]))i*/);
+      time(&rawtime);
+      timeinfo = localtime(&rawtime);
+      strftime(timestr,32,"%H:%M:%S",timeinfo);
+
+      strncpy(str_remote,inet_ntoa(addr_remote->sin_addr),32);
+      strncpy(str_local,inet_ntoa(addr_local->sin_addr),32);
+
+      d2("[%u] %s | %s:%u %c %s %c %s:%u | seq=%u len=%u\n", 
+          getpid(), timestr, str_remote, ntohs(addr_remote->sin_port), arrow, 
+          command2str(pktbuffer[0]), arrow, str_local, 
+          ntohs(addr_local->sin_port), get_seq_num( pktbuffer ), GETLEN(pktbuffer) 
+          /*ntohs((uint16_t)(pktbuffer[2]))i*/);
+    }
 }
 
 int setup_socket(int *sock, int port) {
@@ -147,11 +182,11 @@ int send_all(int sock, struct EndPoint *target, struct List *packets,
     return 0;
 }
 
-char *create_packet(uint8_t command, uint8_t sequence, uint16_t payloadSize,
+char *create_packet(uint8_t command, uint16_t sequence, uint16_t payloadSize,
         char *payload) {
     char *buffer = malloc(sizeof(char) * (payloadSize + HEADER_SIZE));
     buffer[0] = command;
-    buffer[1] = sequence;
+    set_seq_num( buffer, sequence );
     SETLEN(buffer, payloadSize);
     if (payload != NULL) {
         memcpy(buffer + HEADER_SIZE, payload, payloadSize);

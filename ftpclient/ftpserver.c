@@ -42,7 +42,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
     d("Child process opening ephemeral port %d\n", 
             ntohs(((struct sockaddr_in *)&addr)->sin_port));
     /* read the request type */
-    if (buffer[0] != CMD_WRQ && buffer[1] != 0) {
+    if (buffer[0] != CMD_WRQ && get_seq_num( buffer ) != 0) {
         d("Request was not of valid format\n");
         packet = create_packet(CMD_BADREQ, 0, 0, NULL);
         if (send_packet(socket, origin, packet, &addr)) {
@@ -127,7 +127,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
     packet = NULL;
 
     long read = 0;
-    uint8_t expected_sequence = 1;
+    uint16_t expected_sequence = 1;
 
     ////////////////////////////////////////////////////////////////////////////////
     /// Read Data & Write file
@@ -146,7 +146,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
         print_packet((struct sockaddr_in *)&addr, &from, buffer, RECV);
         if (buffer[0] == CMD_DATA) {
             // this is not the packet you're looking for
-            if ((uint8_t) buffer[1] != expected_sequence){
+            if (get_seq_num( buffer ) != expected_sequence){
                 packet = create_packet(CMD_ACK, expected_sequence, 0, NULL);
                 send_packet(socket, origin, packet, &addr);
                 free(packet);
@@ -166,7 +166,13 @@ int copy_file(char *buffer, struct EndPoint *origin) {
                 return RUNTIME_ERROR;
             }
         } else if (buffer[0] == CMD_FIN) {
-            break;
+
+          if ( read != filesize ){
+            d("deleting uncomplete file: %s\n", filename);
+            unlink(filename);
+            exit( -13 );
+          }
+
         } else {
             d("Received command %s\n", command2str(buffer[0]));
         } 
