@@ -105,6 +105,10 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
                     size - read : PAYLOAD_SIZE;
 
             size_t chunksize = fread(payload, sizeof(char), remaining, file);
+            // if there's nothing to send
+            if (chunksize == 0) {
+                break;
+            }
 
             add_to_list(packets,
                     create_packet(CMD_DATA, sequence++, chunksize, payload));
@@ -121,7 +125,7 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
             exit( TIMEOUT );
         }
 
-        usleep( 10000 );
+        usleep( 100000 );
 
         while (1){
 

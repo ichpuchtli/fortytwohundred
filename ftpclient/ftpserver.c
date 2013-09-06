@@ -109,7 +109,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
     }
     // send an ACK from our new ephemeral port
     struct sockaddr_in from;
-    socklen_t fromSize = sizeof(struct sockaddr_in);
+    socklen_t fromSize;
     int size_read = -1;
     time_t startTime = time(NULL);
     packet = create_packet(CMD_ACK, 1, 0, payload);
@@ -120,7 +120,8 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             unlink(filename);
             exit(RUNTIME_ERROR);
         }
-        sleep(1);
+        usleep(10000);
+        size_read = recvfrom(socket, buffer, PACKET_SIZE, MSG_PEEK, (struct sockaddr *) &from, &fromSize);
     } while (size_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)
             && time(NULL) - startTime < 6);
     free(packet);
@@ -134,8 +135,6 @@ int copy_file(char *buffer, struct EndPoint *origin) {
 
     /* read enough bytes */
     while (1) {
-        int chunksize = (filesize - read > PAYLOAD_SIZE) ? 
-                PAYLOAD_SIZE : filesize - read;
         ssize_t actual = read_until_timeout(socket, buffer, PACKET_SIZE,
                 MSG_DONTWAIT, origin);
         if (actual == -1) {

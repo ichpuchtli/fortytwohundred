@@ -204,6 +204,12 @@ char *create_packet(uint8_t command, uint16_t sequence, uint16_t payloadSize,
     return buffer;
 } 
 
+int compare_addr(struct sockaddr_in *a, struct sockaddr_in *b) {
+    fprintf(stderr, "a: %s\n", inet_ntoa(a->sin_addr));
+    fprintf(stderr, "b: %s\n", inet_ntoa(b->sin_addr));
+    return a->sin_port == b->sin_port && a->sin_addr.s_addr == b->sin_addr.s_addr;
+}
+
 ssize_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
         struct sockaddr *wanted, socklen_t *wantedSize) {
     ssize_t read = 0;
@@ -215,12 +221,15 @@ ssize_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
     socklen_t fromSize;
     read = recvfrom(sock, temp, packetSize, flags, &from, &fromSize);
     // is this from the endpoint we care about?
-    if (1 || read > 0 && !memcmp(from.sa_data, wanted->sa_data, 14)) {
+    if (read > 0 && (1 || compare_addr(((struct sockaddr_in *) &from),
+            (struct sockaddr_in *) wanted))) {
         memcpy(buffer, temp, packetSize);
         free(temp);
         return read;
+    } else if (read > 0) {
+        d("Discarding foreign packet\n");
+        fprintf(stderr, "cmd: %s\n", command2str(buffer[0]));
     }
-    d("Discarding foreign packet\n");
     //no? well, ignore it
     free(temp);
     errno = EAGAIN;
