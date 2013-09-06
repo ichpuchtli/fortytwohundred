@@ -38,6 +38,7 @@ const char* command_strings[(size_t)(MAX_CMD_VALUE+1)]={
 
 #define ACK_TIMEOUT 2
 
+
 enum PKTDIR {
   SEND, RECV
 };
@@ -165,7 +166,15 @@ int send_packet(int sock, struct EndPoint *target, char *packet,
             (struct sockaddr_in *) target->addr.in, packet, SEND);
 
     size_t packetSize = HEADER_SIZE + GETLEN(packet);
-
+#ifdef PL_DENOMINATOR
+    FILE *urand = fopen("/dev/urandom", "r");
+    if (fgetc(urand) % PL_DENOMINATOR) {
+        fclose(urand);
+        d("losing this packet!\n");
+        return 0;
+    }
+    fclose(urand);
+#endif
     return sendto(sock, packet, packetSize, 0, target->addr.base,
             target->len) != packetSize;
 }

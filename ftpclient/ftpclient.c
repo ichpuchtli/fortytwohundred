@@ -212,7 +212,6 @@ int process_address(struct sockaddr **addr, socklen_t *len,
     hints.ai_next = NULL;
     int ai = -1;
     if ((ai = getaddrinfo(hostname, port, &hints, &result)) != 0) {
-        fprintf(stderr, "%s:%d\n", hostname, port);
         fprintf(stderr, "Error getting address info: %s\n", gai_strerror(ai));
         exit(BAD_PORT);
     }
