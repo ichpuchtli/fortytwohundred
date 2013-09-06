@@ -45,9 +45,11 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
     time_t startTime = time(NULL);
     int size_read = 0;
     
+    ////////////////////////////////////////////////////////////////////////////////
+    /// Connection Establishment
     sprintf(payload, "%s|%ld", filename, size);
-    char *request = create_packet(CMD_WRQ, 1, strlen(payload), payload);
-    request[1] = request[2] = request[3] = 1; /* can't have 0 in any of these*/
+    char *request = create_packet(CMD_WRQ, 0, strlen(payload), payload);
+    //request[1] = request[2] = request[3] = 1; /* can't have 0 in any of these*/
     do {
         d("Sending request\n");
         if (send_packet(sock, target, request, &mine)) {
@@ -76,17 +78,25 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
         fprintf(stderr, "Server rejected request as badly formed\n");
         exit(BAD_REQUEST);
     }
+   ////////////////////////////////////////////////////////////////////////////////
 
     long written = 0, read = 0;
-    uint8_t sequence = 1;
+    uint8_t sequence = 0;
     struct List *packets = malloc(sizeof(struct List));
     init_list(packets);
+
+
+   ////////////////////////////////////////////////////////////////////////////////
+   /// Data Transfer
     while (written < size && !feof(file) && !ferror(file)) {
         /* read enough for our window */
         while (packets->size < WINDOW_SIZE && read < size) {
+
             size_t remaining = size - read < PAYLOAD_SIZE ? 
                     size - read : PAYLOAD_SIZE;
+
             size_t chunksize = fread(payload, sizeof(char), remaining, file);
+
             add_to_list(packets, 
                     create_packet(CMD_DATA, sequence++, chunksize, payload));
             read += chunksize;
@@ -106,6 +116,8 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
             exit(TIMEOUT);
         }
     }
+   ////////////////////////////////////////////////////////////////////////////////
+
     d("File transfer complete\n");
     return 0;
 }

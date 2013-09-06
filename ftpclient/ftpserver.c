@@ -28,7 +28,11 @@ int socket_fd;
 
 int copy_file(char *buffer, struct EndPoint *origin) {
     int socket = 0;
-    char *payload = buffer + HEADER_SIZE, *packet = NULL;
+
+    char *payload = buffer + HEADER_SIZE;
+
+    char *packet = NULL;
+
     struct sockaddr addr;
     socklen_t mySize = sizeof(struct sockaddr); 
     if (setup_socket(&socket, 0) != 0) {
@@ -45,12 +49,13 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             perror("Error denying request");
             exit(RUNTIME_ERROR);
         }
-        free(packet);
+        //free(packet);
         return BAD_REQUEST;
     }
     /* strip any leading directories (stop "/etc/passwd" etc) */ 
     char *filename = strrchr(payload, '/');
     char *separator = strchr(payload, '|');
+
     if (separator == NULL) {
         d("Missing file size\n");
         packet = create_packet(CMD_BADREQ, 0, 0, NULL);
@@ -82,7 +87,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             perror("Error denying request");
             exit(RUNTIME_ERROR);
         }
-        free(packet);
+        //free(packet);
         return FILE_EXISTS;
     }
     char dummy = '\0';
@@ -118,7 +123,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
         sleep(1);
     } while (size_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)
             && time(NULL) - startTime < 6);
-    free(packet);
+    //free(packet);
     packet = NULL;
 
     long read = 0;
@@ -139,7 +144,7 @@ int copy_file(char *buffer, struct EndPoint *origin) {
             if ((uint8_t) buffer[1] != expected_sequence) {
                 packet = create_packet(CMD_ACK, expected_sequence, 0, NULL);
                 send_packet(socket, origin, packet, &addr);
-                free(packet);
+                //free(packet);
                 continue;
             }
             actual = ntohs(*(buffer + 2));
@@ -169,7 +174,7 @@ void kill_children(void) {
 
 void process_connections(int listen_fd) {
     socket_fd = listen_fd;
-    char *buffer = malloc(sizeof(char) * PACKET_SIZE);
+    char buffer[PACKET_SIZE];
     struct sockaddr_in from;
     struct sockaddr mine;
     socklen_t myLength;
@@ -187,7 +192,8 @@ void process_connections(int listen_fd) {
         d("Waiting for connection\n", listen_fd);
         int n = recvfrom(listen_fd, buffer, PACKET_SIZE, 0,
                 (struct sockaddr *) &from, &fromSize);
-        *(buffer+2) = GETLEN(buffer);
+        //buffer[2] = (uint16_t) GETLEN(buffer);
+
         print_packet((struct sockaddr_in *)&mine, &from, buffer, RECV);
         if (n == 0) {
             d("Empty message received\n");
@@ -203,8 +209,7 @@ void process_connections(int listen_fd) {
                 break;
             case 0:
                 free(pid);
-                struct EndPoint origin = 
-                        {.addr.in = &from, .len = fromSize};
+                struct EndPoint origin = {.addr.in = &from, .len = fromSize};
                 exit(copy_file(buffer, &origin));
                 break;
             default:

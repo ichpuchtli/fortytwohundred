@@ -39,8 +39,8 @@ enum PKTDIR {
   SEND, RECV
 };
 
-#define GETLEN(buf) ~ntohs(*((uint16_t*)(&buf[2])))
-#define SETLEN(buf, len) ~(*((uint16_t*)(&buf[2])) = htons(len))
+#define GETLEN(buf) ntohs(*((uint16_t*)(&buf[2])))
+#define SETLEN(buf, len) (*((uint16_t*)(&buf[2])) = htons(len))
 
 #define d2(...) fprintf(stderr,__VA_ARGS__)
 
@@ -127,7 +127,9 @@ int send_packet(int sock, struct EndPoint *target, char *packet,
         struct sockaddr *local) {
     print_packet((struct sockaddr_in *) local,
             (struct sockaddr_in *) target->addr.in, packet, SEND);
-    size_t packetSize = HEADER_SIZE + ntohs(*(packet + 2));
+
+    size_t packetSize = HEADER_SIZE + GETLEN(packet);
+
     return sendto(sock, packet, packetSize, 0, target->addr.base,
             target->len) != packetSize;
 }
@@ -145,7 +147,7 @@ int send_all(int sock, struct EndPoint *target, struct List *packets,
     return 0;
 }
 
-char *create_packet(uint8_t command, uint8_t sequence, short payloadSize,
+char *create_packet(uint8_t command, uint8_t sequence, uint16_t payloadSize,
         char *payload) {
     char *buffer = malloc(sizeof(char) * (payloadSize + HEADER_SIZE));
     buffer[0] = command;
@@ -168,7 +170,7 @@ size_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
     socklen_t fromSize;
     read = recvfrom(sock, temp, packetSize, flags, &from, &fromSize);
     // is this from the endpoint we care about?
-    if (1 || read > 0 && !memcmp(from.sa_data, wanted->sa_data, 14)) {
+    if (read > 0 && !memcmp(from.sa_data, wanted->sa_data, 14)) {
         if (read == -1 && errno == EWOULDBLOCK) {
             fprintf(stderr, ".");
         }
@@ -177,7 +179,7 @@ size_t read_only_from(int sock, char *buffer, size_t packetSize, int flags,
         free(temp);
         return read;
     }
-    d("Discarding foreign packet\n");
+    //d("Discarding foreign packet\n");
     //no? well, ignore it
     free(temp);
     errno = EAGAIN;
