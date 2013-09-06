@@ -20,9 +20,10 @@
 
 extern int debug, errno;
 
-void signal_handler(int signal) {
-    fprintf(stderr, "SIGPIPE received, exiting\n");
-    exit(RUNTIME_ERROR);
+void signal_handler( int signal )
+{
+  fprintf( stderr, "SIGPIPE received, exiting\n" );
+  exit( RUNTIME_ERROR );
 }
 
 /**
@@ -32,10 +33,11 @@ void signal_handler(int signal) {
  *
  * @return the size in bytes of the file
  */
-long get_file_size(char *filename) {
-    struct stat s;
-    stat(filename, &s);
-    return s.st_size;
+long get_file_size( char *filename )
+{
+  struct stat s;
+  stat( filename, &s );
+  return s.st_size;
 }
 
 /**
@@ -48,44 +50,45 @@ long get_file_size(char *filename) {
  * @param target the target address of the host
  * @param mine the local address
  */
-void complete_request(int sock, char *buffer, long size, char *filename,
-        struct EndPoint *target, struct sockaddr *mine) {
-      char *payload = buffer + HEADER_SIZE;
-      int size_read = 0;
-      time_t startTime = time(NULL);
+void complete_request( int sock, char *buffer, long size, char *filename,
+                       struct EndPoint *target, struct sockaddr *mine )
+{
+  char *payload = buffer + HEADER_SIZE;
+  int size_read = 0;
+  time_t startTime = time( NULL );
 
-      ////////////////////////////////////////////////////////////////////////////////
-      /// Connection Establishment
-      sprintf(payload, "%s|%ld", filename, size);
-      char *request = create_packet(CMD_WRQ, 0, strlen(payload), payload);
-      do {
-          d("Sending request\n");
-          if (send_packet(sock, target, request, mine)) {
-              perror("Error sending request");
-              exit(RUNTIME_ERROR);
-          }
-          usleep(100000);
-          size_read = recvfrom(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
-                  target->addr.base, &target->len);
-      } while (size_read < 0 && time(NULL) - startTime < 6);
-      free(request);
-
-      if (size_read < 1) {
-          fprintf(stderr, "Connection to server timed out.\n");
-          exit(TIMEOUT);
-      }
-      print_packet((struct sockaddr_in *) mine, target->addr.in, buffer, RECV);
-
-      if (buffer[0] == CMD_ACK) {
-          d("Request accepted\n");
-      } else if (buffer[0] == CMD_EXISTS) {
-          printf("%s already exists on the server, "
-                  "the write request was rejected\n", filename);
-          exit(FILE_EXISTS);
-      } else if (buffer[0] == CMD_BADREQ) {
-          fprintf(stderr, "Server rejected request as badly formed\n");
-          exit(BAD_REQUEST);
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Connection Establishment
+  sprintf( payload, "%s|%ld", filename, size );
+  char *request = create_packet( CMD_WRQ, 0, strlen( payload ), payload );
+  do {
+    d( "Sending request\n" );
+    if ( send_packet( sock, target, request, mine ) ) {
+      perror( "Error sending request" );
+      exit( RUNTIME_ERROR );
     }
+    usleep( 100000 );
+    size_read = recvfrom( sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                          target->addr.base, &target->len );
+  } while ( size_read < 0 && time( NULL ) - startTime < 6 );
+  free( request );
+
+  if ( size_read < 1 ) {
+    fprintf( stderr, "Connection to server timed out.\n" );
+    exit( TIMEOUT );
+  }
+  print_packet( ( struct sockaddr_in * ) mine, target->addr.in, buffer, RECV );
+
+  if ( buffer[0] == CMD_ACK ) {
+    d( "Request accepted\n" );
+  } else if ( buffer[0] == CMD_EXISTS ) {
+    printf( "%s already exists on the server, "
+            "the write request was rejected\n", filename );
+    exit( FILE_EXISTS );
+  } else if ( buffer[0] == CMD_BADREQ ) {
+    fprintf( stderr, "Server rejected request as badly formed\n" );
+    exit( BAD_REQUEST );
+  }
 
 }
 
@@ -100,133 +103,134 @@ void complete_request(int sock, char *buffer, long size, char *filename,
  *
  * @return 0 on success, non zero otherwise
  */
-int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
-    char buffer[PACKET_SIZE] = {0};
-    char *payload = buffer + HEADER_SIZE;
+int copy_file( FILE *file, int sock, char *filename, struct EndPoint *target )
+{
+  char buffer[PACKET_SIZE] = {0};
+  char *payload = buffer + HEADER_SIZE;
 
-    long size = get_file_size(filename);
-    struct sockaddr mine;
+  long size = get_file_size( filename );
+  struct sockaddr mine;
 
-    socklen_t mySize;
-    if (getsockname(sock, &mine, &mySize) == -1) {
-        perror("getting sock name:");
+  socklen_t mySize;
+  if ( getsockname( sock, &mine, &mySize ) == -1 ) {
+    perror( "getting sock name:" );
+  }
+  // make our request to the server, exits if timeout
+  complete_request( sock, buffer, size, filename, target, &mine );
+
+  // set up for data transfer
+  long written = 0, read = 0;
+  uint16_t sequence = 1;
+  struct List *packets = malloc( sizeof( struct List ) );
+  init_list( packets );
+
+  time_t lastACK = time( NULL );
+
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Data Transfer
+  while ( written != size ) {
+    /* read enough for our window */
+    while ( packets->size < WINDOW_SIZE && written < size ) {
+
+      size_t remaining = size - read < PAYLOAD_SIZE ?
+                         size - read : PAYLOAD_SIZE;
+
+      size_t chunksize = fread( payload, sizeof( char ), remaining, file );
+
+      if ( chunksize == 0 ) {
+        break;
+      }
+
+      add_to_list( packets,
+                   create_packet( CMD_DATA, sequence++, chunksize, payload ) );
+      read += chunksize;
     }
-    // make our request to the server, exits if timeout
-    complete_request(sock, buffer, size, filename, target, &mine);
+    /* send the whole window's worth */
+    if ( send_all( sock, target, packets, &mine ) ) {
+      perror( "Error sending data packet" );
+      exit( RUNTIME_ERROR );
+    }
 
-    // set up for data transfer
-    long written = 0, read = 0;
-    uint16_t sequence = 1;
-    struct List *packets = malloc(sizeof(struct List));
-    init_list(packets);
+    if ( ( time( NULL ) - lastACK ) > ACK_TIMEOUT ) {
+      fprintf( stderr, "Connection timed out\n" );
+      exit( TIMEOUT );
+    }
 
-    time_t lastACK = time( NULL );
+    usleep( 100000 );
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Data Transfer
-    while (written != size) {
-        /* read enough for our window */
-        while (packets->size < WINDOW_SIZE && written < size) {
+    while ( 1 ) {
 
-            size_t remaining = size - read < PAYLOAD_SIZE ?
-                    size - read : PAYLOAD_SIZE;
+      read = read_only_from( sock, buffer, PACKET_SIZE, MSG_DONTWAIT, target->addr.base, &target->len );
 
-            size_t chunksize = fread(payload, sizeof(char), remaining, file);
+      if ( read < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) ) {
+        break;
+      }
 
-            if (  chunksize == 0 ){
-              break;
-            }
+      print_packet( ( struct sockaddr_in * )&mine, target->addr.in, buffer, RECV );
 
-            add_to_list(packets,
-                    create_packet(CMD_DATA, sequence++, chunksize, payload));
-            read += chunksize;
-        }
-        /* send the whole window's worth */
-        if (send_all(sock, target, packets, &mine)) {
-            perror("Error sending data packet");
-            exit(RUNTIME_ERROR);
-        }
+      uint16_t acked_seq = get_seq_num( buffer );
 
-        if ( ( time( NULL ) - lastACK ) > ACK_TIMEOUT ){
-            fprintf(stderr, "Connection timed out\n" );
-            exit( TIMEOUT );
-        }
+      if ( buffer[0] == CMD_ACK ) {
 
-        usleep( 100000 );
 
-        while (1){
+        while ( packets->head != NULL ) {
 
-          read = read_only_from(sock, buffer, PACKET_SIZE, MSG_DONTWAIT, target->addr.base, &target->len);
+          uint16_t f = get_seq_num( ( char* ) packets->head->data );
+          uint16_t l = get_seq_num( ( char* ) packets->tail->data );
 
-          if ( read < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) ) {
+          if ( acked_seq == f ) {
             break;
           }
 
-          print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
-
-          uint16_t acked_seq = get_seq_num( buffer );
-
-          if (buffer[0] == CMD_ACK) {
-
-
-              while (packets->head != NULL ) {
-
-                  uint16_t f = get_seq_num( (char*) packets->head->data );
-                  uint16_t l = get_seq_num( (char*) packets->tail->data );
-
-                  if ( acked_seq == f ){
-                    break;
-                  }
-
-                  int inside = f <= l;
-                  if ((  inside && acked_seq < f && acked_seq > l )
-                    || ( !inside && acked_seq > f && acked_seq < l ) ) {
-                      break;
-                  }
-                  lastACK = time( NULL );
-                  written += GETLEN( ( char * )packets->head->data );
-                  free(packets->head->data);
-                  remove_front(packets);
-              }
-          } else if ( buffer[ 0 ] == CMD_FIN ) {
-            if ( written < size ) {
-              fprintf(stderr, "Server closed connection unexpectedly\n" );
-              exit( BAD_REQUEST );
-            } else {
-              break;
-            }
-          } else {
-            d( "Received unknown packet command\n" );
-          }
-        }
-    }
-    d("closing connection\n");
-   ////////////////////////////////////////////////////////////////////////////////
-    char *packet = create_packet(CMD_FIN, 0, 0, NULL);
-    ssize_t r;
-    usleep(10000);
-    lastACK = time(NULL);
-    while (time(NULL) - lastACK < ACK_TIMEOUT) {
-        send_packet(sock, target, packet, &mine);
-        usleep(100000);
-        r = read_only_from(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
-                target->addr.base, &target->len);
-        // ignore leftover ACKs from the data packets
-        while (r > 0 && buffer[0] == CMD_ACK) {
-          print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
-          r = read_only_from(sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
-                target->addr.base, &target->len);
-        }
-        print_packet((struct sockaddr_in *)&mine, target->addr.in, buffer, RECV);
-        if (buffer[0] == CMD_FINACK) {
-            // FIN has been ACKed
+          int inside = f <= l;
+          if ( ( inside && acked_seq < f && acked_seq > l )
+               || ( !inside && acked_seq > f && acked_seq < l ) ) {
             break;
+          }
+          lastACK = time( NULL );
+          written += GETLEN( ( char * )packets->head->data );
+          free( packets->head->data );
+          remove_front( packets );
         }
+      } else if ( buffer[ 0 ] == CMD_FIN ) {
+        if ( written < size ) {
+          fprintf( stderr, "Server closed connection unexpectedly\n" );
+          exit( BAD_REQUEST );
+        } else {
+          break;
+        }
+      } else {
+        d( "Received unknown packet command\n" );
+      }
     }
+  }
+  d( "closing connection\n" );
+  ////////////////////////////////////////////////////////////////////////////////
+  char *packet = create_packet( CMD_FIN, 0, 0, NULL );
+  ssize_t r;
+  usleep( 10000 );
+  lastACK = time( NULL );
+  while ( time( NULL ) - lastACK < ACK_TIMEOUT ) {
+    send_packet( sock, target, packet, &mine );
+    usleep( 100000 );
+    r = read_only_from( sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                        target->addr.base, &target->len );
+    // ignore leftover ACKs from the data packets
+    while ( r > 0 && buffer[0] == CMD_ACK ) {
+      print_packet( ( struct sockaddr_in * )&mine, target->addr.in, buffer, RECV );
+      r = read_only_from( sock, buffer, PACKET_SIZE, MSG_DONTWAIT,
+                          target->addr.base, &target->len );
+    }
+    print_packet( ( struct sockaddr_in * )&mine, target->addr.in, buffer, RECV );
+    if ( buffer[0] == CMD_FINACK ) {
+      // FIN has been ACKed
+      break;
+    }
+  }
 
-    free(packet);
-    d("File transfer complete\n");
-    return 0;
+  free( packet );
+  d( "File transfer complete\n" );
+  return 0;
 }
 
 /**
@@ -239,26 +243,27 @@ int copy_file(FILE *file, int sock, char *filename, struct EndPoint *target) {
  *
  * @return 0 on success, non zero otherwise
  */
-int process_address(struct sockaddr **addr, socklen_t *len, 
-        char *hostname, char *port) {
-    struct addrinfo hints;
-    struct addrinfo *result = NULL;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_protocol = 0;
-    hints.ai_flags = AI_PASSIVE;
-    hints.ai_canonname = NULL;
-    hints.ai_addr = NULL;
-    hints.ai_next = NULL;
-    int ai = -1;
-    if ((ai = getaddrinfo(hostname, port, &hints, &result)) != 0) {
-        fprintf(stderr, "Error getting address info: %s\n", gai_strerror(ai));
-        exit(BAD_PORT);
-    }
-    *addr = result->ai_addr;
-    *len = result->ai_addrlen;
-    return 0;
+int process_address( struct sockaddr **addr, socklen_t *len,
+                     char *hostname, char *port )
+{
+  struct addrinfo hints;
+  struct addrinfo *result = NULL;
+  memset( &hints, 0, sizeof( struct addrinfo ) );
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_protocol = 0;
+  hints.ai_flags = AI_PASSIVE;
+  hints.ai_canonname = NULL;
+  hints.ai_addr = NULL;
+  hints.ai_next = NULL;
+  int ai = -1;
+  if ( ( ai = getaddrinfo( hostname, port, &hints, &result ) ) != 0 ) {
+    fprintf( stderr, "Error getting address info: %s\n", gai_strerror( ai ) );
+    exit( BAD_PORT );
+  }
+  *addr = result->ai_addr;
+  *len = result->ai_addrlen;
+  return 0;
 }
 
 /**
@@ -269,70 +274,72 @@ int process_address(struct sockaddr **addr, socklen_t *len,
  *
  * @return 0 on success, non zero otherwise
  */
-int arg_check(int argc, char **argv) {
-    if (argc == 5) {
-        /* -d not supplied */
-        if (strncmp("-d", argv[1], 2) != 0) {
-            fprintf(stderr, USAGE, argv[0]);
-            return BAD_ARGS;
-        }
-        debug = 1;
-    } else if (argc == 4) {
-        /* -d supplied */
-        if (strncmp("-d", argv[1], 2) == 0) {
-            fprintf(stderr, USAGE, argv[0]);
-            return BAD_ARGS;
-        }
-    } else {
-        fprintf(stderr, USAGE, argv[0]);
-        return BAD_ARGS;
+int arg_check( int argc, char **argv )
+{
+  if ( argc == 5 ) {
+    /* -d not supplied */
+    if ( strncmp( "-d", argv[1], 2 ) != 0 ) {
+      fprintf( stderr, USAGE, argv[0] );
+      return BAD_ARGS;
     }
-    return 0;
+    debug = 1;
+  } else if ( argc == 4 ) {
+    /* -d supplied */
+    if ( strncmp( "-d", argv[1], 2 ) == 0 ) {
+      fprintf( stderr, USAGE, argv[0] );
+      return BAD_ARGS;
+    }
+  } else {
+    fprintf( stderr, USAGE, argv[0] );
+    return BAD_ARGS;
+  }
+  return 0;
 }
 
-int main(int argc, char **argv){
-    unsigned int port = 0;
-    int args = arg_check(argc, argv);
-    if (args) {
-        return BAD_ARGS;
-    }
-    FILE *file = NULL;
-    /* check the port */
-    char crap;
-    if ((sscanf(argv[2 + debug], "%u%c", &port, &crap)) != 1 || port < 1 
-            || port > 65535) {
-        fprintf(stderr, "The port '%s' is invalid, please provide a "
-                "port in the range 1 to 65535\n", argv[2 + debug]);
-        return BAD_PORT;
-    }
-    d("Port OK: %d\n", port);
-    /* check the file */
-    if ((file = fopen(argv[3 + debug], "rb")) == NULL) {
-        perror("Error opening given file");
-        return BAD_FILE;
-    }
-    d("File opened successfully\n");
-    /* set up the signal handler */
-    struct sigaction signals;
-    signals.sa_handler = signal_handler;
-    signals.sa_flags = SA_RESTART;
-    sigaction(SIGPIPE, &signals, NULL);
+int main( int argc, char **argv )
+{
+  unsigned int port = 0;
+  int args = arg_check( argc, argv );
+  if ( args ) {
+    return BAD_ARGS;
+  }
+  FILE *file = NULL;
+  /* check the port */
+  char crap;
+  if ( ( sscanf( argv[2 + debug], "%u%c", &port, &crap ) ) != 1 || port < 1
+       || port > 65535 ) {
+    fprintf( stderr, "The port '%s' is invalid, please provide a "
+             "port in the range 1 to 65535\n", argv[2 + debug] );
+    return BAD_PORT;
+  }
+  d( "Port OK: %d\n", port );
+  /* check the file */
+  if ( ( file = fopen( argv[3 + debug], "rb" ) ) == NULL ) {
+    perror( "Error opening given file" );
+    return BAD_FILE;
+  }
+  d( "File opened successfully\n" );
+  /* set up the signal handler */
+  struct sigaction signals;
+  signals.sa_handler = signal_handler;
+  signals.sa_flags = SA_RESTART;
+  sigaction( SIGPIPE, &signals, NULL );
 
-    /* check address, set up socket, connect */
-    struct EndPoint target;
-    process_address(&target.addr.base, &target.len, argv[1 + debug],
-            argv[2 + debug]);
-    d("getaddrinfo() successful\n");
+  /* check address, set up socket, connect */
+  struct EndPoint target;
+  process_address( &target.addr.base, &target.len, argv[1 + debug],
+                   argv[2 + debug] );
+  d( "getaddrinfo() successful\n" );
 
-    int sock;
-    if (setup_socket(&sock, 0) != 0) {
-        return RUNTIME_ERROR;
-    }
-    d("Bound successfully\n");
-    /* request to write (reads not required in the assignment) */
-    copy_file(file, sock, argv[3 + debug], &target);
-    d("Exiting without errors\n");
-    fclose(file);
-    close(sock);
-    return 0;
+  int sock;
+  if ( setup_socket( &sock, 0 ) != 0 ) {
+    return RUNTIME_ERROR;
+  }
+  d( "Bound successfully\n" );
+  /* request to write (reads not required in the assignment) */
+  copy_file( file, sock, argv[3 + debug], &target );
+  d( "Exiting without errors\n" );
+  fclose( file );
+  close( sock );
+  return 0;
 }
